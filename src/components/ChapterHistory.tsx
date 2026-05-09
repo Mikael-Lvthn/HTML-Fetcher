@@ -15,6 +15,7 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [idsToDelete, setIdsToDelete] = useState<string[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [rangeInput, setRangeInput] = useState('');
   
   // For editing chapter body
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -54,6 +55,47 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
       newSelected.add(id);
     }
     setSelectedIds(newSelected);
+  };
+
+  const selectRange = () => {
+    if (!rangeInput.trim()) return;
+    
+    const parts = rangeInput.split(',').map(p => p.trim());
+    const newSelected = new Set(selectedIds);
+    
+    parts.forEach(part => {
+      if (part.includes('-')) {
+        const [start, end] = part.split('-').map(n => parseInt(n));
+        if (!isNaN(start) && !isNaN(end)) {
+          const s = Math.min(start, end);
+          const e = Math.max(start, end);
+          // Chapters are usually shown in reverse chronological order (newest first)
+          // The index in 'chapters' might not match what the user expects (Chapter 1, 2, 3...)
+          // So we match against the chapter title/index if possible.
+          // For now, let's assume the user means "Chapter N" as it appears in the title logic.
+          chapters.forEach((c, idx) => {
+            const chapterNum = chapters.length - idx;
+            if (chapterNum >= s && chapterNum <= e) {
+              newSelected.add(c.id);
+            }
+          });
+        }
+      } else {
+        const num = parseInt(part);
+        if (!isNaN(num)) {
+          chapters.forEach((c, idx) => {
+            const chapterNum = chapters.length - idx;
+            if (chapterNum === num) {
+              newSelected.add(c.id);
+            }
+          });
+        }
+      }
+    });
+    
+    setSelectedIds(newSelected);
+    setRangeInput('');
+    toast.success('Selection updated!');
   };
 
   const copyChapter = (text: string) => {
@@ -193,6 +235,23 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
             placeholder="🔍 Search chapters..."
           />
         )}
+
+        <div className="flex items-center gap-2 pr-2 border-r border-border/50">
+          <input
+            type="text"
+            value={rangeInput}
+            onChange={e => setRangeInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && selectRange()}
+            className="input-field py-1 px-2 text-xs w-32 bg-black/20"
+            placeholder="Range (e.g. 1-50)"
+          />
+          <button 
+            onClick={selectRange}
+            className="btn-secondary text-[10px] py-1.5 px-2 font-bold uppercase"
+          >
+            Select
+          </button>
+        </div>
 
         <div className="flex items-center gap-2">
           {selectedIds.size > 0 && (
