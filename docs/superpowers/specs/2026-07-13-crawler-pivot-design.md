@@ -14,9 +14,11 @@ the scraping code, and rebrands the product as **Novel Crawler**.
 **Phasing / implementation order:**
 - **Phase 1 — Pivot (this section):** remove the AI/translation scaffolding,
   consolidate scrapers, rebrand. Implemented first.
-- **Phase 2 — Reader:** add a URL-to-clean-format capability (Markdown / HTML /
-  structured JSON) powered by Jina Reader. Implemented after Phase 1. See the
-  "Phase 2" section below.
+- **Phase 2 — Firecrawl engine + Reader:** add a toggleable Firecrawl-backed
+  content engine (off = existing cheerio server-fetch, on = Firecrawl for
+  JS-heavy / protected sites like wtr-lab), shared by the novel crawler and a
+  new URL-to-clean-format Reader (Markdown / HTML / structured JSON). Implemented
+  after Phase 1. See the "Phase 2" section below.
 
 ## Scope decisions (settled during brainstorming)
 
@@ -136,100 +138,162 @@ Deleted:
 
 ---
 
-# Phase 2: Reader (URL → clean formats via Jina Reader)
+# Phase 2: Firecrawl content engine (toggleable) + Reader
 
 ## Goal
 
-Add a general "Reader" capability: paste any URL and get its main content back
-as clean **Markdown**, **HTML**, or **structured JSON** — the LLM-ready reader
-pattern (à la Firecrawl / Jina Reader). Implemented after Phase 1.
+Add a **Firecrawl-backed content engine** that the app can toggle on and off,
+plus a new **Reader** feature that turns any URL into clean **Markdown**,
+**HTML**, or **structured JSON**. When the toggle is **off**, the app keeps using
+its existing server-fetch + cheerio path (free, works on simple sites). When
+**on**, requests go through Firecrawl's REST API, which renders JavaScript and
+defeats anti-bot / encrypted content — so protected sites like wtr-lab.com
+return real content. Implemented after Phase 1.
 
 ## Scope decisions (settled during brainstorming)
 
-- **Extraction engine:** integrate **Jina Reader** (`https://r.jina.ai/<url>`).
-  Works keyless for MVP. It renders JavaScript, so it handles SPA/JS-heavy pages.
-- **Structured JSON:** deterministic metadata only (no AI/LLM). Jina's
-  `Accept: application/json` response already provides this
-  (`title`, `description`, `url`, `content`, `publishedTime`, `metadata`,
-  `links`).
-- **Positioning:** a new capability *alongside* the novel crawler, reachable
-  from its own `/reader` page and sidebar entry — not a replacement.
+- **Engine:** integrate **Firecrawl** via its REST API
+  (`POST https://api.firecrawl.dev/v1/scrape`, `Authorization: Bearer <key>`).
+  The in-environment Firecrawl MCP tools are for the agent only; the deployed app
+  uses the HTTP API.
+- **Toggle:** a per-request on/off switch, **defaulting off** to protect credits.
+  Off = cheerio server-fetch; On = Firecrawl. Ephemeral UI state (not persisted);
+  the boolean is passed to the API per call.
+- **Shared engine:** one helper (`src/lib/contentFetcher.ts`) is used by BOTH the
+  novel chapter flow (`clean-chapter`) and the Reader (`read`). Single place that
+  branches on the toggle and normalizes output.
+- **API key:** stored **per-user** in Settings, in a new
+  `user_settings.firecrawl_api_key` column (mirrors the existing
+  `scraper_cookies`). Each user spends their own Firecrawl credits.
+- **Structured JSON:** deterministic metadata only (no AI/LLM). Built from
+  Firecrawl's `metadata` + `links` (toggle on) or cheerio (toggle off). The
+  Firecrawl `json`/`jsonOptions` LLM-extraction feature is deliberately NOT used.
+- **Positioning:** the Reader is a new capability *alongside* the novel crawler,
+  reachable from its own `/reader` page + sidebar entry.
 
-## Verified facts (probed against the live service 2026-07-13)
+## Verified facts (probed against live Firecrawl 2026-07-13)
 
-- `GET https://r.jina.ai/https://example.com` → Markdown, no API key required.
-- `Accept: application/json` → `{ code, status, data: { title, description,
-  url, content, publishedTime, metadata, links?, images?, usage } }`.
-- `X-Return-Format: html` → cleaned HTML of the page.
-- Jina renders JS and returns the **decrypted** wtr-lab chapter text as clean
-  Markdown (the encrypted `arr:…` body that a plain server fetch cannot read).
-  This is the basis for the "bonus" note below.
-- Jina can leave site-injected watermark lines (e.g. "【…remember our domain
-  name…】"); `finalizeText()`-style artifact stripping can scrub them.
+- `firecrawl_scrape` on the wtr-lab chapter (JS-rendered, encrypted body)
+  returned clean Markdown of the real chapter prose — it even followed the
+  infinite-scroll reader and captured chapters 1–3 in one call.
+- Response shape: `{ markdown, html?, links?, metadata: { title, description,
+  statusCode, sourceURL, creditsUsed, ... } }`.
+- **Cost: 1 credit per scrape** on the `basic` proxy. `waitFor` (e.g. 6000ms)
+  helps JS render; `onlyMainContent: true` trims nav/chrome.
+- Firecrawl still leaves site watermark / "Ad Blocker Detected" lines →
+  `finalizeText()`-style artifact stripping (Phase 1, section D) scrubs them.
 
 ## Non-goals (Phase 2)
 
-- LLM-based schema extraction (deliberately excluded to preserve the no-AI
-  direction from Phase 1). Left as a possible future phase.
-- Multi-page crawling / site mapping. Single URL → single result only.
-- Rewiring the novel `clean-chapter` flow through Jina (see bonus below) — a
-  separate follow-up, not part of Phase 2.
+- Firecrawl's LLM `json` schema extraction (would reintroduce an LLM; excluded).
+- Multi-page `crawl`/`map` (single URL → single result only). The existing
+  `crawl-novel` TOC discovery is unchanged; Firecrawl is only for content fetch.
+- Persisting the toggle as a saved default, and an env-level shared key. Both are
+  easy later additions but out of scope now.
+- Auto-fallback (silently switching to Firecrawl when cheerio yields too little).
+  The switch is explicit/user-controlled for now.
 
 ## Changes
 
-### A. New API route — `src/app/api/read/route.ts`
-- `POST { url: string, format: 'markdown' | 'html' | 'json' }`.
-- Validate `url` with `new URL()`; 400 on invalid/missing.
-- Proxy to `https://r.jina.ai/${url}` with per-format headers:
-  - `markdown` → no special header (Jina default).
-  - `html` → `X-Return-Format: html`.
-  - `json` → `Accept: application/json` + `X-With-Links-Summary: true`; return
-    the parsed `data` object.
-- Send `Authorization: Bearer ${process.env.JINA_API_KEY}` only if the env var
-  is set (keyless otherwise). This is the seam for lifting rate limits later.
-- Use an `AbortController` timeout (~30s) and map failures to helpful messages,
-  mirroring the error style of the (now-deleted) `/api/scrape` route.
-- Return `{ format, content }` for markdown/html, or `{ format, data }` for json.
+### A. Shared content engine — `src/lib/contentFetcher.ts` (new)
+- Export `fetchContent(url, opts)` where
+  `opts = { useFirecrawl: boolean, firecrawlKey?: string, formats?: Format[] }`.
+- **Firecrawl path** (`useFirecrawl && firecrawlKey`):
+  - `POST https://api.firecrawl.dev/v1/scrape` with body
+    `{ url, formats: ['markdown','html','links'], onlyMainContent: true,
+    waitFor: 6000 }` and `Authorization: Bearer <firecrawlKey>`.
+  - If `useFirecrawl` is true but no key is present, throw a clear error
+    ("Firecrawl is enabled but no API key is set in Settings").
+- **Cheerio path** (toggle off): reuse Phase 1's `scraper.ts`. Produce:
+  - `markdown` via `turndown` (small dep) applied to the extracted content
+    subtree; `html` = that subtree's HTML; plain text via existing cleaning.
+- **Normalize** both paths to a common shape:
+  `{ markdown, html, text, metadata: { title, description, sourceUrl, links? },
+  engine: 'firecrawl' | 'cheerio' }`. Run the result text through the shared
+  artifact-stripping so watermarks are removed regardless of engine.
 
-### B. New UI — `/reader`
-- `src/app/(app)/reader/page.tsx` (server component, under the authed `(app)`
+### B. `clean-chapter` — route through the shared engine
+- `src/app/api/clean-chapter/route.ts`:
+  - Accept a `useFirecrawl?: boolean` field in the POST body.
+  - Load the user's `firecrawl_api_key` from `user_settings` (alongside the
+    existing `scraper_cookies` lookup).
+  - Call `fetchContent(url, { useFirecrawl, firecrawlKey })`; return the cleaned
+    text (`.text`/`.markdown`) as it does today so the save flow is unchanged.
+  - Toggle-off behavior is byte-for-byte the current behavior.
+
+### C. Novel crawler UI — `src/components/ChapterProcessor.tsx`
+- Add a **"Use Firecrawl"** toggle (switch), default off, visible across the
+  single / bulk / crawl modes.
+- Include `useFirecrawl` in the `/api/clean-chapter` request bodies (single +
+  bulk loops).
+- Small helper text noting Firecrawl uses credits + requires a key in Settings.
+
+### D. Reader — new API route `src/app/api/read/route.ts`
+- `POST { url, format: 'markdown' | 'html' | 'json', useFirecrawl?: boolean }`.
+- Validate `url`; load the user's `firecrawl_api_key`.
+- Call `fetchContent(url, { useFirecrawl, firecrawlKey })` and shape the response
+  to the requested format:
+  - `markdown` → `{ format, content: result.markdown }`.
+  - `html` → `{ format, content: result.html }`.
+  - `json` → `{ format, data: { title, description, url, text, links } }`
+    (deterministic metadata).
+- `AbortController` timeout (~30s); map failures to helpful messages.
+
+### E. Reader UI — `/reader`
+- `src/app/(app)/reader/page.tsx` (server component under the authed `(app)`
   group) rendering `ReaderClient.tsx`.
 - `src/app/(app)/reader/ReaderClient.tsx` (client):
-  - URL input.
-  - Format tabs: Markdown / HTML / JSON.
+  - URL input, format tabs (Markdown / HTML / JSON), and the **Use Firecrawl**
+    toggle (default off).
   - Submit → `POST /api/read`.
-  - Output pane (monospace / `chapter-output` styling) with **Copy** and
-    **Download** (`.md` / `.html` / `.json`) buttons and a word/char count.
-  - Reuse existing `card`, `input-field`, `btn-primary`, `spinner` classes and
-    `react-hot-toast` for feedback.
+  - Output pane with **Copy** and **Download** (`.md` / `.html` / `.json`)
+    buttons and a word/char count.
+  - Reuse `card`, `input-field`, `btn-primary`, `spinner`, `react-hot-toast`.
 
-### C. Navigation — `src/components/Sidebar.tsx`
+### F. Settings — Firecrawl API key
+- **DB:** add one column (non-destructive):
+  `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS firecrawl_api_key text;`
+  Run via the Supabase SQL editor (or dashboard). This is the one required DB
+  change in the whole design; documented for the user to apply.
+- `src/types/index.ts`: add `firecrawl_api_key: string | null` to `UserSettings`
+  (which Phase 1 already trimmed of the AI fields).
+- `src/app/(app)/settings/SettingsClient.tsx` (+ its `page.tsx` select): add a
+  Firecrawl API key input next to the scraper-cookies field, saved to
+  `user_settings.firecrawl_api_key`.
+
+### G. Navigation — `src/components/Sidebar.tsx`
 - Add a "Reader" nav item pointing to `/reader`.
 
-## Bonus / future (out of Phase 2 scope, flagged)
-
-Because Jina decrypts JS-rendered pages, the novel `clean-chapter` path could
-later route through Jina to fetch wtr-lab (and similar) chapter text
-server-side, replacing the fragile browser-beam script. Cheap to add once the
-Jina integration exists, but intentionally deferred.
+### H. Dependency
+- Add `turndown` (+ `@types/turndown`) for HTML→Markdown on the cheerio path.
 
 ## Verification (Phase 2)
 
 1. `npm run lint` — clean.
 2. `npm run build` — clean.
-3. Smoke test `/reader`:
-   - example.com → Markdown, HTML, and JSON all return content.
-   - A JS-heavy URL (wtr-lab chapter) → real decrypted prose comes back.
-   - Copy + Download buttons produce correct file contents/extensions.
+3. Smoke test with toggle **off** (cheerio): a simple page (example.com) returns
+   Markdown / HTML / JSON in the Reader; a novel chapter on a simple site cleans
+   and saves as before.
+4. Smoke test with toggle **on** (Firecrawl, key set in Settings): a wtr-lab
+   chapter returns real decrypted prose in both the Reader and the novel crawler;
+   watermark lines are stripped.
+5. Toggle on with no key set → clear "set your key in Settings" error, no crash.
 
 ## Files touched (Phase 2)
 
 New:
+- `src/lib/contentFetcher.ts`
 - `src/app/api/read/route.ts`
 - `src/app/(app)/reader/page.tsx`
 - `src/app/(app)/reader/ReaderClient.tsx`
 
 Modified:
+- `src/app/api/clean-chapter/route.ts`
+- `src/components/ChapterProcessor.tsx`
+- `src/app/(app)/settings/SettingsClient.tsx` and `settings/page.tsx`
+- `src/types/index.ts` (add `firecrawl_api_key` to `UserSettings`)
 - `src/components/Sidebar.tsx`
-- `.env.local` / deployment env: optional `JINA_API_KEY` (documented, not
-  required for MVP).
+- `package.json` (add `turndown`, `@types/turndown`)
+
+Database (one-time, run by user):
+- `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS firecrawl_api_key text;`
