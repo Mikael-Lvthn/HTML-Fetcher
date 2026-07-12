@@ -148,7 +148,12 @@ plus a new **Reader** feature that turns any URL into clean **Markdown**,
 its existing server-fetch + cheerio path (free, works on simple sites). When
 **on**, requests go through Firecrawl's REST API, which renders JavaScript and
 defeats anti-bot / encrypted content — so protected sites like wtr-lab.com
-return real content. Implemented after Phase 1.
+return real content.
+
+**Output parity is a hard requirement:** on the novel-crawler path, the cleaned
+text Firecrawl produces MUST be identical in shape to what the current crawler
+produces today (main text only, ads/nav/watermarks removed). This is guaranteed
+by design — see the parity approach below. Implemented after Phase 1.
 
 ## Scope decisions (settled during brainstorming)
 
@@ -156,90 +161,110 @@ return real content. Implemented after Phase 1.
   (`POST https://api.firecrawl.dev/v1/scrape`, `Authorization: Bearer <key>`).
   The in-environment Firecrawl MCP tools are for the agent only; the deployed app
   uses the HTTP API.
+- **Output parity (crawler path):** Firecrawl replaces ONLY the `fetch()` step.
+  It returns the fully-rendered **raw HTML**, which is then passed through the
+  EXISTING `cleanChapterHtml()` → `finalizeText()` pipeline unchanged. Because the
+  same cleaning code runs regardless of engine, the stored/displayed text is
+  identical in shape (clean prose, ads/watermarks stripped) whether the toggle is
+  on or off.
 - **Toggle:** a per-request on/off switch, **defaulting off** to protect credits.
   Off = cheerio server-fetch; On = Firecrawl. Ephemeral UI state (not persisted);
   the boolean is passed to the API per call.
-- **Shared engine:** one helper (`src/lib/contentFetcher.ts`) is used by BOTH the
-  novel chapter flow (`clean-chapter`) and the Reader (`read`). Single place that
-  branches on the toggle and normalizes output.
-- **API key:** stored **per-user** in Settings, in a new
-  `user_settings.firecrawl_api_key` column (mirrors the existing
-  `scraper_cookies`). Each user spends their own Firecrawl credits.
-- **Structured JSON:** deterministic metadata only (no AI/LLM). Built from
-  Firecrawl's `metadata` + `links` (toggle on) or cheerio (toggle off). The
-  Firecrawl `json`/`jsonOptions` LLM-extraction feature is deliberately NOT used.
+- **Shared engine:** one helper (`src/lib/contentFetcher.ts`) fetches rendered
+  HTML (server-fetch when off, Firecrawl when on) and is used by BOTH the novel
+  chapter flow (`clean-chapter`) and the Reader (`read`).
+- **API key:** a **single, editable, shared key — NOT per-user.** Stored in a new
+  one-row `app_settings` table and edited from the Settings UI, so it can be
+  swapped between different Firecrawl accounts at any time.
+- **Structured JSON (Reader):** deterministic metadata only (no AI/LLM). Built
+  from Firecrawl's `metadata` + `links` (on) or cheerio (off). Firecrawl's LLM
+  `json`/`jsonOptions` extraction is deliberately NOT used.
 - **Positioning:** the Reader is a new capability *alongside* the novel crawler,
   reachable from its own `/reader` page + sidebar entry.
 
 ## Verified facts (probed against live Firecrawl 2026-07-13)
 
 - `firecrawl_scrape` on the wtr-lab chapter (JS-rendered, encrypted body)
-  returned clean Markdown of the real chapter prose — it even followed the
-  infinite-scroll reader and captured chapters 1–3 in one call.
-- Response shape: `{ markdown, html?, links?, metadata: { title, description,
-  statusCode, sourceURL, creditsUsed, ... } }`.
-- **Cost: 1 credit per scrape** on the `basic` proxy. `waitFor` (e.g. 6000ms)
-  helps JS render; `onlyMainContent: true` trims nav/chrome.
-- Firecrawl still leaves site watermark / "Ad Blocker Detected" lines →
-  `finalizeText()`-style artifact stripping (Phase 1, section D) scrubs them.
+  returned the real chapter prose. `rawHtml` (post-render) contains the decrypted
+  text — 60 hits on a known character name, zero remaining `arr:` cipher blobs.
+- **Stale selector:** the site's content container is now
+  `<div class="chapter-body">` with per-line `<div class="wtr-line">`, NOT the
+  `#read-content` that `cleanChapterHtml` currently targets. The selector list
+  must add `.chapter-body` for extraction to hit the right node.
+- **Ad-blocker trap:** Firecrawl output includes an inline "Ad Blocker Detected"
+  notice, and `finalizeText()` currently returns `''` when it detects that text.
+  Extracting only `.chapter-body` keeps that notice OUT of the extracted subtree,
+  so the trap never fires. Inline watermark lines (`【…domain…】`, obfuscated
+  `w?k?n.com`) are removed by the finalizeText artifact rules (extend Phase 1 D).
+- Response shape: `{ rawHtml?, markdown?, html?, links?, metadata: { title,
+  description, statusCode, sourceURL, creditsUsed, ... } }`.
+- **Cost: 1 credit per scrape** on the `basic` proxy. `waitFor` (~6000ms) helps
+  JS render; `onlyMainContent` trims nav/chrome for the Reader's markdown/html.
 
 ## Non-goals (Phase 2)
 
 - Firecrawl's LLM `json` schema extraction (would reintroduce an LLM; excluded).
 - Multi-page `crawl`/`map` (single URL → single result only). The existing
   `crawl-novel` TOC discovery is unchanged; Firecrawl is only for content fetch.
-- Persisting the toggle as a saved default, and an env-level shared key. Both are
-  easy later additions but out of scope now.
+- Persisting the toggle as a saved default. Easy later addition; out of scope now.
 - Auto-fallback (silently switching to Firecrawl when cheerio yields too little).
   The switch is explicit/user-controlled for now.
 
 ## Changes
 
-### A. Shared content engine — `src/lib/contentFetcher.ts` (new)
-- Export `fetchContent(url, opts)` where
-  `opts = { useFirecrawl: boolean, firecrawlKey?: string, formats?: Format[] }`.
-- **Firecrawl path** (`useFirecrawl && firecrawlKey`):
-  - `POST https://api.firecrawl.dev/v1/scrape` with body
-    `{ url, formats: ['markdown','html','links'], onlyMainContent: true,
-    waitFor: 6000 }` and `Authorization: Bearer <firecrawlKey>`.
-  - If `useFirecrawl` is true but no key is present, throw a clear error
-    ("Firecrawl is enabled but no API key is set in Settings").
-- **Cheerio path** (toggle off): reuse Phase 1's `scraper.ts`. Produce:
-  - `markdown` via `turndown` (small dep) applied to the extracted content
-    subtree; `html` = that subtree's HTML; plain text via existing cleaning.
-- **Normalize** both paths to a common shape:
-  `{ markdown, html, text, metadata: { title, description, sourceUrl, links? },
-  engine: 'firecrawl' | 'cheerio' }`. Run the result text through the shared
-  artifact-stripping so watermarks are removed regardless of engine.
+### A. Scraper selector fix — `src/lib/scraper.ts`
+- Add `.chapter-body` (and `.wtr-line` as a sibling hint) to the `WTR_SELECTORS`
+  list in `cleanChapterHtml` so extraction targets the real content container.
+- Extend `finalizeText()` artifact stripping (from Phase 1 D) to also drop the
+  bracketed watermark lines (`【…】` promo lines) and obfuscated-domain lines.
+- This benefits both engines; it is what makes the parity guarantee hold on
+  Firecrawl-rendered HTML.
 
-### B. `clean-chapter` — route through the shared engine
+### B. Shared content engine — `src/lib/contentFetcher.ts` (new)
+- Export `fetchRenderedHtml(url, opts)` where
+  `opts = { useFirecrawl: boolean, firecrawlKey?: string, cookies?: string }`.
+  Returns the (rendered) page HTML as a string — this is the drop-in `fetch()`
+  replacement that guarantees parity.
+  - **Off:** the existing server `fetch()` with UA/referer/cookie headers.
+  - **On:** `POST https://api.firecrawl.dev/v1/scrape` with
+    `{ url, formats: ['rawHtml'], waitFor: 6000 }` + `Authorization: Bearer <key>`;
+    return `data.rawHtml`.
+  - If `useFirecrawl` is true but no key is configured, throw a clear error
+    ("Firecrawl is enabled but no API key is set in Settings").
+- Export `fetchForReader(url, opts)` for the Reader, returning
+  `{ markdown, html, text, metadata: { title, description, sourceUrl, links? } }`:
+  - **On:** one Firecrawl scrape with `formats: ['markdown','html','links']`,
+    `onlyMainContent: true`; map fields directly.
+  - **Off:** `fetchRenderedHtml` → cheerio extract → `html` (content subtree),
+    `markdown` via `turndown`, `text` via existing cleaning.
+
+### C. `clean-chapter` — swap fetch for the shared engine
 - `src/app/api/clean-chapter/route.ts`:
   - Accept a `useFirecrawl?: boolean` field in the POST body.
-  - Load the user's `firecrawl_api_key` from `user_settings` (alongside the
-    existing `scraper_cookies` lookup).
-  - Call `fetchContent(url, { useFirecrawl, firecrawlKey })`; return the cleaned
-    text (`.text`/`.markdown`) as it does today so the save flow is unchanged.
-  - Toggle-off behavior is byte-for-byte the current behavior.
+  - Read the single Firecrawl key from `app_settings` (see F).
+  - Replace the inline `fetch(url, …)` with
+    `fetchRenderedHtml(url, { useFirecrawl, firecrawlKey, cookies })`, then call
+    the SAME `cleanChapterHtml(html)` as today.
+  - Toggle-off behavior is byte-for-byte the current behavior; toggle-on differs
+    only in where the HTML comes from → identical cleaned output (parity).
 
-### C. Novel crawler UI — `src/components/ChapterProcessor.tsx`
+### D. Novel crawler UI — `src/components/ChapterProcessor.tsx`
 - Add a **"Use Firecrawl"** toggle (switch), default off, visible across the
   single / bulk / crawl modes.
 - Include `useFirecrawl` in the `/api/clean-chapter` request bodies (single +
   bulk loops).
 - Small helper text noting Firecrawl uses credits + requires a key in Settings.
 
-### D. Reader — new API route `src/app/api/read/route.ts`
+### E. Reader — new API route `src/app/api/read/route.ts`
 - `POST { url, format: 'markdown' | 'html' | 'json', useFirecrawl?: boolean }`.
-- Validate `url`; load the user's `firecrawl_api_key`.
-- Call `fetchContent(url, { useFirecrawl, firecrawlKey })` and shape the response
-  to the requested format:
+- Validate `url`; read the Firecrawl key from `app_settings`.
+- Call `fetchForReader(url, { useFirecrawl, firecrawlKey })` and shape output:
   - `markdown` → `{ format, content: result.markdown }`.
   - `html` → `{ format, content: result.html }`.
-  - `json` → `{ format, data: { title, description, url, text, links } }`
-    (deterministic metadata).
+  - `json` → `{ format, data: { title, description, url, text, links } }`.
 - `AbortController` timeout (~30s); map failures to helpful messages.
 
-### E. Reader UI — `/reader`
+### F. Reader UI — `/reader`
 - `src/app/(app)/reader/page.tsx` (server component under the authed `(app)`
   group) rendering `ReaderClient.tsx`.
 - `src/app/(app)/reader/ReaderClient.tsx` (client):
@@ -250,34 +275,47 @@ return real content. Implemented after Phase 1.
     buttons and a word/char count.
   - Reuse `card`, `input-field`, `btn-primary`, `spinner`, `react-hot-toast`.
 
-### F. Settings — Firecrawl API key
-- **DB:** add one column (non-destructive):
-  `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS firecrawl_api_key text;`
-  Run via the Supabase SQL editor (or dashboard). This is the one required DB
-  change in the whole design; documented for the user to apply.
-- `src/types/index.ts`: add `firecrawl_api_key: string | null` to `UserSettings`
-  (which Phase 1 already trimmed of the AI fields).
-- `src/app/(app)/settings/SettingsClient.tsx` (+ its `page.tsx` select): add a
-  Firecrawl API key input next to the scraper-cookies field, saved to
-  `user_settings.firecrawl_api_key`.
+### G. Settings — single global Firecrawl API key
+- **DB:** create a one-row global config table (run once in the Supabase SQL
+  editor):
+  ```sql
+  CREATE TABLE IF NOT EXISTS app_settings (
+    id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    firecrawl_api_key text
+  );
+  INSERT INTO app_settings (id) VALUES (1) ON CONFLICT DO NOTHING;
+  ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY app_settings_read  ON app_settings FOR SELECT TO authenticated USING (true);
+  CREATE POLICY app_settings_write ON app_settings FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+  ```
+  Single row (`id = 1`), so it is global — not per-user. Any authenticated user
+  can read/edit it (acceptable for single-operator use; noted as a trade-off).
+- `src/types/index.ts`: add an `AppSettings` interface (`{ firecrawl_api_key:
+  string | null }`). `UserSettings` is unchanged from Phase 1 (no per-user key).
+- `src/app/(app)/settings/SettingsClient.tsx` (+ `settings/page.tsx`): add a
+  Firecrawl API key input, loaded from and saved to `app_settings` (row `id = 1`),
+  next to the existing scraper-cookies field.
 
-### G. Navigation — `src/components/Sidebar.tsx`
+### H. Navigation — `src/components/Sidebar.tsx`
 - Add a "Reader" nav item pointing to `/reader`.
 
-### H. Dependency
-- Add `turndown` (+ `@types/turndown`) for HTML→Markdown on the cheerio path.
+### I. Dependency
+- Add `turndown` (+ `@types/turndown`) for HTML→Markdown on the Reader's off path.
 
 ## Verification (Phase 2)
 
 1. `npm run lint` — clean.
 2. `npm run build` — clean.
-3. Smoke test with toggle **off** (cheerio): a simple page (example.com) returns
-   Markdown / HTML / JSON in the Reader; a novel chapter on a simple site cleans
-   and saves as before.
-4. Smoke test with toggle **on** (Firecrawl, key set in Settings): a wtr-lab
-   chapter returns real decrypted prose in both the Reader and the novel crawler;
-   watermark lines are stripped.
-5. Toggle on with no key set → clear "set your key in Settings" error, no crash.
+3. **Parity check (the key one):** pick a simple site a plain fetch CAN read.
+   Clean a chapter with the toggle **off**, then **on** (Firecrawl). The saved
+   cleaned text should match (same extraction pipeline) — confirm no markdown
+   artifacts, no ads, same paragraphing.
+4. Toggle **off**: Reader returns Markdown / HTML / JSON for example.com; a normal
+   chapter cleans and saves as before.
+5. Toggle **on** (key set in Settings): a wtr-lab chapter returns real decrypted
+   prose via BOTH the crawler and the Reader; `.chapter-body` is extracted; the
+   "Ad Blocker Detected" trap does not fire; watermark lines are stripped.
+6. Toggle on with no key configured → clear "set your key in Settings" error.
 
 ## Files touched (Phase 2)
 
@@ -288,12 +326,16 @@ New:
 - `src/app/(app)/reader/ReaderClient.tsx`
 
 Modified:
+- `src/lib/scraper.ts` (add `.chapter-body` selector + watermark stripping)
 - `src/app/api/clean-chapter/route.ts`
 - `src/components/ChapterProcessor.tsx`
 - `src/app/(app)/settings/SettingsClient.tsx` and `settings/page.tsx`
-- `src/types/index.ts` (add `firecrawl_api_key` to `UserSettings`)
+- `src/types/index.ts` (add `AppSettings` interface)
 - `src/components/Sidebar.tsx`
 - `package.json` (add `turndown`, `@types/turndown`)
+
+Database (one-time, run by user):
+- Create the `app_settings` table + RLS policies (SQL in section G).
 
 Database (one-time, run by user):
 - `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS firecrawl_api_key text;`
