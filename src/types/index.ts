@@ -28,6 +28,11 @@ export interface UserSettings {
   scraper_cookies: string | null;
 }
 
+// Single-row global config (app_settings, id = 1) — shared by all users
+export interface AppSettings {
+  firecrawl_api_key: string | null;
+}
+
 export interface ProcessingStep {
   id: string;
   label: string;

@@ -93,7 +93,7 @@ export function cleanChapterHtml(html: string): string {
   const $ = cheerio.load(html);
 
   // 1. Try to find WTR-LAB specific content first
-  const WTR_SELECTORS = ['#read-content', '.read-content', '.chapter-content'];
+  const WTR_SELECTORS = ['.chapter-body', '#read-content', '.read-content', '.chapter-content'];
   for (const s of WTR_SELECTORS) {
     const el = $(s).first();
     if (el.length && el.text().trim().length > 100) {
@@ -171,7 +171,11 @@ function finalizeText(text: string): string {
     .replace(/\n{3,}/g, '\n\n')
     .split('\n')
     .map(line => line.trim())
+    // Inline watermarks injected mid-chapter by aggregator sites
+    .filter(line => !/^【.*】$/.test(line))
+    .filter(line => !/\b[\w?？]*[?？][\w?？]*\.(com|net|org)\b/i.test(line))
     .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 
   // If the content is just an ad-blocker warning, return empty so fallbacks can try

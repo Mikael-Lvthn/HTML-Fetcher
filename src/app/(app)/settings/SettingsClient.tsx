@@ -4,20 +4,23 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import Header from '@/components/Header';
-import { UserSettings } from '@/types';
+import { UserSettings, AppSettings } from '@/types';
 import toast from 'react-hot-toast';
 
 interface Props {
   userEmail: string;
   settings: UserSettings;
+  appSettings: AppSettings;
 }
 
-export default function SettingsClient({ userEmail, settings }: Props) {
+export default function SettingsClient({ userEmail, settings, appSettings }: Props) {
   const router = useRouter();
   const supabase = createClient();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [cookies, setCookies] = useState(settings?.scraper_cookies || '');
+  const [firecrawlKey, setFirecrawlKey] = useState(appSettings?.firecrawl_api_key || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingKey, setIsSavingKey] = useState(false);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -56,6 +59,22 @@ export default function SettingsClient({ userEmail, settings }: Props) {
       router.refresh();
     }
     setIsSaving(false);
+  };
+
+  const handleSaveFirecrawlKey = async () => {
+    setIsSavingKey(true);
+    const { error } = await supabase
+      .from('app_settings')
+      .update({ firecrawl_api_key: firecrawlKey || null })
+      .eq('id', 1);
+
+    if (error) {
+      toast.error('Failed to save Firecrawl key');
+    } else {
+      toast.success('Firecrawl key saved!');
+      router.refresh();
+    }
+    setIsSavingKey(false);
   };
 
   return (
@@ -98,6 +117,35 @@ export default function SettingsClient({ userEmail, settings }: Props) {
               className="btn-primary w-full justify-center"
             >
               {isSaving ? 'Saving...' : 'Save Scraper Settings'}
+            </button>
+          </div>
+        </section>
+
+        {/* Firecrawl Engine */}
+        <section className="card">
+          <h2 className="text-base font-semibold text-text-primary mb-3">🔥 Firecrawl Engine</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">
+                API Key
+              </label>
+              <input
+                type="password"
+                value={firecrawlKey}
+                onChange={(e) => setFirecrawlKey(e.target.value)}
+                className="input-field font-mono text-xs"
+                placeholder="fc-..."
+              />
+              <p className="text-[10px] text-text-muted mt-2">
+                Shared key used when the &quot;Use Firecrawl&quot; toggle is on (Novel Scraper and Reader). Firecrawl renders JavaScript and bypasses anti-bot protection, but each scrape uses credits. This key is global — it applies to every user of this app.
+              </p>
+            </div>
+            <button
+              onClick={handleSaveFirecrawlKey}
+              disabled={isSavingKey}
+              className="btn-primary w-full justify-center"
+            >
+              {isSavingKey ? 'Saving...' : 'Save Firecrawl Key'}
             </button>
           </div>
         </section>

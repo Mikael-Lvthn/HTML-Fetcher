@@ -13,10 +13,17 @@ export default async function SettingsPage() {
     .eq('user_id', user.id)
     .single();
 
+  const { data: appSettings } = await supabase
+    .from('app_settings')
+    .select('firecrawl_api_key')
+    .eq('id', 1)
+    .single();
+
   return (
     <SettingsClient
       userEmail={user.email || ''}
       settings={settings || {}}
+      appSettings={appSettings || { firecrawl_api_key: null }}
     />
   );
 }

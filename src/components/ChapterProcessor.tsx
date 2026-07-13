@@ -25,6 +25,7 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
   const [steps, setSteps] = useState<ProcessingStep[]>([]);
   const [error, setError] = useState('');
   const [bulkUrls, setBulkUrls] = useState('');
+  const [useFirecrawl, setUseFirecrawl] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number; results: { url: string; status: string; message?: string }[] } | null>(null);
   const outputRef = useRef<HTMLDivElement>(null);
 
@@ -55,7 +56,7 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
         const res = await fetch('/api/clean-chapter', { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify({ url: urlInput }) 
+          body: JSON.stringify({ url: urlInput, useFirecrawl })
         });
         const data = await res.json();
         if (data.error) { updateStep('fetch', 'error'); throw new Error(data.error); }
@@ -115,7 +116,7 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
         const res = await fetch('/api/clean-chapter', { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify({ url: urls[i] }) 
+          body: JSON.stringify({ url: urls[i], useFirecrawl })
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
@@ -194,6 +195,25 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
         <button onClick={() => setMode('single')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'single' ? 'bg-accent/15 text-accent border border-accent/20' : 'text-text-muted hover:text-text-primary'}`}>Single Chapter</button>
         <button onClick={() => setMode('bulk')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'bulk' ? 'bg-accent/15 text-accent border border-accent/20' : 'text-text-muted hover:text-text-primary'}`}>📚 Bulk Queue</button>
         <button onClick={() => setMode('crawl')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'crawl' ? 'bg-accent/15 text-accent border border-accent/20' : 'text-text-muted hover:text-text-primary'}`}>🕷️ Crawl Novel</button>
+      </div>
+
+      <div className="card flex items-center justify-between gap-4 py-3">
+        <div>
+          <p className="text-sm font-medium text-text-primary">🔥 Use Firecrawl</p>
+          <p className="text-xs text-text-muted">
+            Renders JavaScript &amp; bypasses anti-bot protection. Uses Firecrawl credits and requires an API key in Settings.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={useFirecrawl}
+          onClick={() => setUseFirecrawl(!useFirecrawl)}
+          disabled={isProcessing}
+          className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${useFirecrawl ? 'bg-accent' : 'bg-bg-elevated border border-border'}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${useFirecrawl ? 'translate-x-5' : ''}`} />
+        </button>
       </div>
 
       {mode === 'crawl' && (
