@@ -46,7 +46,7 @@ export default function SignupPage() {
             <span className="text-white font-bold text-2xl">M</span>
           </div>
           <h1 className="text-2xl font-bold gradient-text">Create Account</h1>
-          <p className="text-text-muted text-sm mt-1">Start cleaning MTL fanfiction</p>
+          <p className="text-text-muted text-sm mt-1">Start crawling & archiving web novels</p>
         </div>
         <form onSubmit={handleSignup} className="card glow-accent space-y-5">
           <div>

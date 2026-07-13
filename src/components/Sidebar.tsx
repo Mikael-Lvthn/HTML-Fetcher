@@ -53,13 +53,13 @@ export default function Sidebar() {
       <div className="p-6 border-b border-border">
         <Link href="/dashboard" className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent to-purple-500 flex items-center justify-center">
-            <span className="text-white font-bold text-lg">M</span>
+            <span className="text-white font-bold text-lg">N</span>
           </div>
           <div>
             <h1 className="font-bold text-lg text-text-primary leading-tight">
-              MTL Cleaner
+              Novel Crawler
             </h1>
-            <p className="text-xs text-text-muted">Fanfic Translation Tool</p>
+            <p className="text-xs text-text-muted">Crawl • Clean • Archive</p>
           </div>
         </Link>
       </div>

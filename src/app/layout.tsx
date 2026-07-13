@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'MTL Cleaner — Fanfic Translation Tool',
+  title: 'Novel Crawler — Crawl, clean & archive web novels',
   description:
-    'Clean machine-translated fanfiction chapters into polished English prose using AI. Manage multiple translation projects with custom system prompts.',
+    'Crawl web-novel sites, strip ads and boilerplate, and archive clean chapters in an organized library.',
 };
 
 export default function RootLayout({

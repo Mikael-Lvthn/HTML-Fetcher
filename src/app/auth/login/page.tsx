@@ -41,7 +41,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-accent to-purple-500 mb-4">
             <span className="text-white font-bold text-2xl">M</span>
           </div>
-          <h1 className="text-2xl font-bold gradient-text">MTL Cleaner</h1>
+          <h1 className="text-2xl font-bold gradient-text">Novel Crawler</h1>
           <p className="text-text-muted text-sm mt-1">Sign in to continue</p>
         </div>
 

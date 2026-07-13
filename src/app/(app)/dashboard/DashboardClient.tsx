@@ -10,7 +10,7 @@ export default function DashboardClient({ projects }: { projects: Project[] }) {
     <div>
       <Header
         title="My Projects"
-        subtitle={`${projects.length} translation project${projects.length !== 1 ? 's' : ''}`}
+        subtitle={`${projects.length} project${projects.length !== 1 ? 's' : ''}`}
         action={
           <Link href="/projects/new" className="btn-primary">
             + New Project
@@ -50,7 +50,7 @@ export default function DashboardClient({ projects }: { projects: Project[] }) {
         <div className="text-center py-20">
           <div className="text-4xl mb-4">📚</div>
           <h3 className="text-lg font-semibold text-text-primary mb-2">No projects yet</h3>
-          <p className="text-text-muted text-sm mb-6">Create your first translation project to get started</p>
+          <p className="text-text-muted text-sm mb-6">Create your first project to get started</p>
           <Link href="/projects/new" className="btn-primary">+ Create Project</Link>
         </div>
       )}
