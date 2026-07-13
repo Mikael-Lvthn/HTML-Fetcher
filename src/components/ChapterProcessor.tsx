@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
-import { detectProject } from '@/lib/projectDetector';
 import { Project, ProcessingStep } from '@/types';
 import toast from 'react-hot-toast';
 
@@ -20,8 +19,6 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
   const [manualMode, setManualMode] = useState(false);
   const [manualText, setManualText] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState(preselectedProjectId || '');
-  
-  const [detectedProject, setDetectedProject] = useState<Project | null>(null);
   const [cleanedText, setCleanedText] = useState('');
   const [wordCount, setWordCount] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -41,12 +38,10 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
     const pSteps: ProcessingStep[] = !manualMode && urlInput
       ? [
           { id: 'fetch', label: 'Fetching & Cleaning...', emoji: '🌐', status: 'pending' },
-          { id: 'detect', label: 'Detecting project...', emoji: '🔍', status: 'pending' },
           { id: 'save', label: 'Saving to history...', emoji: '💾', status: 'pending' },
         ]
       : [
           { id: 'clean', label: 'Cleaning text...', emoji: '✨', status: 'pending' },
-          { id: 'detect', label: 'Detecting project...', emoji: '🔍', status: 'pending' },
           { id: 'save', label: 'Saving to history...', emoji: '💾', status: 'pending' },
         ];
     setSteps(pSteps);
@@ -81,14 +76,7 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
         updateStep('clean', 'done');
       }
 
-      updateStep('detect', 'active');
-      let projId = selectedProjectId;
-      if (!projId) {
-        const det = detectProject(finalCleaned, projects);
-        if (det) { setDetectedProject(det); setSelectedProjectId(det.id); projId = det.id; }
-      }
-      updateStep('detect', 'done');
-
+      const projId = selectedProjectId;
       const project = projects.find(p => p.id === projId);
       if (!project) throw new Error('Please select a project');
 
@@ -187,16 +175,15 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
   };
 
   const handleCopy = () => { navigator.clipboard.writeText(cleanedText); toast.success('Copied!'); };
-  const handleReset = () => { 
-    setCleanedText(''); 
-    setUrlInput(''); 
-    setManualText(''); 
+  const handleReset = () => {
+    setCleanedText('');
+    setUrlInput('');
+    setManualText('');
     setManualIndexHtml('');
-    setWordCount(0); 
-    setSteps([]); 
-    setError(''); 
-    setDetectedProject(null); 
-    setBulkProgress(null); 
+    setWordCount(0);
+    setSteps([]);
+    setError('');
+    setBulkProgress(null);
   };
 
   useEffect(() => { if (outputRef.current && cleanedText) outputRef.current.scrollTop = outputRef.current.scrollHeight; }, [cleanedText]);
@@ -305,8 +292,7 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
 
           <div className="card">
             <h3 className="text-sm font-semibold text-text-primary mb-3">Project</h3>
-            {detectedProject && <div className="mb-3 p-3 rounded-lg bg-success/10 border border-success/20 flex items-center gap-2"><span className="text-success text-sm">✅ Detected:</span><span className="text-sm font-medium" style={{ color: detectedProject.color }}>{detectedProject.title}</span></div>}
-            <select value={selectedProjectId} onChange={e => { setSelectedProjectId(e.target.value); setDetectedProject(null); }} className="input-field" disabled={isProcessing}><option value="">Select a project...</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select>
+            <select value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)} className="input-field" disabled={isProcessing}><option value="">Select a project...</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select>
           </div>
 
           <button onClick={handleProcess} disabled={isProcessing || (!urlInput && !manualText) || !selectedProjectId} className="btn-primary w-full justify-center py-3.5 text-base glow-accent">{isProcessing ? <><div className="spinner" /> Processing...</> : <>✨ Fetch &amp; Clean Chapter</>}</button>
