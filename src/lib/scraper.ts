@@ -158,6 +158,16 @@ function finalizeText(text: string): string {
     .replace(/\r/g, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
+    // MTL / site artifacts (folded in from the former textExtractor.ts)
+    .replace(/\(End of this chapter\)/gi, '')
+    .replace(/\(End of Chapter\)/gi, '')
+    .replace(/Please read on the original site/gi, '')
+    .replace(/Support the author by reading on/gi, '')
+    // HTML entities that may survive text extraction
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
     .replace(/\n{3,}/g, '\n\n')
     .split('\n')
     .map(line => line.trim())
@@ -165,7 +175,7 @@ function finalizeText(text: string): string {
     .trim();
 
   // If the content is just an ad-blocker warning, return empty so fallbacks can try
-  if (cleaned.toLowerCase().includes('ad blocker detected') || 
+  if (cleaned.toLowerCase().includes('ad blocker detected') ||
       cleaned.toLowerCase().includes('disable your ad blocker')) {
     return '';
   }
