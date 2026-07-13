@@ -19,30 +19,17 @@ export default function ProjectDetailClient({ project: initialProject, chapters:
   const supabase = createClient();
   const [project, setProject] = useState(initialProject);
   const [chapters, setChapters] = useState(initialChapters);
-  const [keywordsInput, setKeywordsInput] = useState(project.keywords.join(', '));
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(project.title);
   const [editSubtitle, setEditSubtitle] = useState(project.subtitle || '');
-  const [editFandoms, setEditFandoms] = useState(project.fandoms.join(', '));
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-
-
-  const saveKeywords = async () => {
-    const keywords = keywordsInput.split(',').map(k => k.trim()).filter(Boolean);
-    const { error } = await supabase.from('projects').update({ keywords }).eq('id', project.id);
-    if (error) { toast.error('Failed to save keywords'); return; }
-    setProject(prev => ({ ...prev, keywords }));
-    toast.success('Keywords saved!');
-  };
-
   const saveProjectDetails = async () => {
-    const fandoms = editFandoms.split(',').map(f => f.trim()).filter(Boolean);
     const { error } = await supabase.from('projects').update({
-      title: editTitle, subtitle: editSubtitle || null, fandoms,
+      title: editTitle, subtitle: editSubtitle || null,
     }).eq('id', project.id);
     if (error) { toast.error('Failed to save'); return; }
-    setProject(prev => ({ ...prev, title: editTitle, subtitle: editSubtitle, fandoms }));
+    setProject(prev => ({ ...prev, title: editTitle, subtitle: editSubtitle }));
     setIsEditing(false);
     toast.success('Project updated!');
   };
@@ -80,7 +67,6 @@ export default function ProjectDetailClient({ project: initialProject, chapters:
               <div className="space-y-3 mb-4">
                 <input value={editTitle} onChange={e => setEditTitle(e.target.value)} className="input-field text-xl font-bold" />
                 <input value={editSubtitle} onChange={e => setEditSubtitle(e.target.value)} className="input-field text-sm" placeholder="Subtitle" />
-                <input value={editFandoms} onChange={e => setEditFandoms(e.target.value)} className="input-field text-sm" placeholder="Fandoms (comma-separated)" />
                 <div className="flex gap-2">
                   <button onClick={saveProjectDetails} className="btn-primary text-sm">Save</button>
                   <button onClick={() => setIsEditing(false)} className="btn-secondary text-sm">Cancel</button>
@@ -93,11 +79,6 @@ export default function ProjectDetailClient({ project: initialProject, chapters:
                   <h1 className="text-2xl font-bold text-text-primary">{project.title}</h1>
                 </div>
                 {project.subtitle && <p className="text-text-secondary text-sm ml-6">{project.subtitle}</p>}
-                <div className="flex flex-wrap gap-1.5 mt-3 ml-6">
-                  {project.fandoms.map((f, i) => (
-                    <span key={i} className="px-2 py-0.5 rounded-md text-xs font-medium" style={{ backgroundColor: `${project.color}20`, color: project.color, border: `1px solid ${project.color}30` }}>{f}</span>
-                  ))}
-                </div>
                 <div className="flex items-center gap-4 mt-3 ml-6 text-xs text-text-muted">
                   <span>📄 {chapters.length} chapters</span>
                   <span>📝 {totalWords.toLocaleString()} total words</span>
@@ -126,18 +107,6 @@ export default function ProjectDetailClient({ project: initialProject, chapters:
         </div>
       )}
 
-
-
-      <section className="mb-8">
-        <h2 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">🔍 Auto-Detect Keywords</h2>
-        <div className="card">
-          <div className="flex gap-3">
-            <input value={keywordsInput} onChange={e => setKeywordsInput(e.target.value)} className="input-field flex-1" placeholder="keyword1, keyword2, keyword3" />
-            <button onClick={saveKeywords} className="btn-primary text-sm shrink-0">Save Keywords</button>
-          </div>
-          <p className="text-xs text-text-muted mt-2">Comma-separated. Used to auto-match chapters to this project.</p>
-        </div>
-      </section>
 
       <section className="mt-8 pt-8 border-t border-border">
         <div className="flex items-center justify-between mb-4">

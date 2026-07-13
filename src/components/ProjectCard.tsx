@@ -35,25 +35,6 @@ export default function ProjectCard({ project }: ProjectCardProps) {
           />
         </div>
 
-        {/* Fandoms */}
-        {project.fandoms && project.fandoms.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            {project.fandoms.map((fandom, i) => (
-              <span
-                key={i}
-                className="px-2 py-0.5 rounded-md text-xs font-medium"
-                style={{
-                  backgroundColor: `${project.color}20`,
-                  color: project.color,
-                  border: `1px solid ${project.color}30`,
-                }}
-              >
-                {fandom}
-              </span>
-            ))}
-          </div>
-        )}
-
         {/* Stats */}
         <div className="flex items-center gap-4 mt-auto pt-3 border-t border-border">
           <div className="flex items-center gap-1.5 text-text-muted text-xs">
