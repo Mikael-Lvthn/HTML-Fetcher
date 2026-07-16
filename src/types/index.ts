@@ -36,6 +36,5 @@ export interface AppSettings {
 export interface ProcessingStep {
   id: string;
   label: string;
-  emoji: string;
   status: 'pending' | 'active' | 'done' | 'error';
 }

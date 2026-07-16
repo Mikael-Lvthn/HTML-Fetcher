@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase';
 import { Project, ProcessingStep } from '@/types';
 import toast from 'react-hot-toast';
+import { QueueIcon, CrawlIcon, FlameIcon, LinkIcon, DocumentTextIcon, AlertIcon, CheckCircleIcon, XCircleIcon, SparklesIcon, ClipboardIcon } from '@/components/icons';
 
 interface Props {
   projects: Project[];
@@ -38,12 +39,12 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
 
     const pSteps: ProcessingStep[] = !manualMode && urlInput
       ? [
-          { id: 'fetch', label: 'Fetching & Cleaning...', emoji: '🌐', status: 'pending' },
-          { id: 'save', label: 'Saving to history...', emoji: '💾', status: 'pending' },
+          { id: 'fetch', label: 'Fetching & Cleaning...', status: 'pending' },
+          { id: 'save', label: 'Saving to history...', status: 'pending' },
         ]
       : [
-          { id: 'clean', label: 'Cleaning text...', emoji: '✨', status: 'pending' },
-          { id: 'save', label: 'Saving to history...', emoji: '💾', status: 'pending' },
+          { id: 'clean', label: 'Cleaning text...', status: 'pending' },
+          { id: 'save', label: 'Saving to history...', status: 'pending' },
         ];
     setSteps(pSteps);
 
@@ -192,14 +193,14 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <button onClick={() => setMode('single')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'single' ? 'bg-accent/15 text-accent border border-accent/20' : 'text-text-muted hover:text-text-primary'}`}>Single Chapter</button>
-        <button onClick={() => setMode('bulk')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'bulk' ? 'bg-accent/15 text-accent border border-accent/20' : 'text-text-muted hover:text-text-primary'}`}>📚 Bulk Queue</button>
-        <button onClick={() => setMode('crawl')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'crawl' ? 'bg-accent/15 text-accent border border-accent/20' : 'text-text-muted hover:text-text-primary'}`}>🕷️ Crawl Novel</button>
+        <button onClick={() => setMode('single')} className={`inline-flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'single' ? 'bg-accent/15 text-accent border border-accent/20' : 'text-text-muted hover:text-text-primary border border-transparent'}`}>Single Chapter</button>
+        <button onClick={() => setMode('bulk')} className={`inline-flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'bulk' ? 'bg-accent/15 text-accent border border-accent/20' : 'text-text-muted hover:text-text-primary border border-transparent'}`}><QueueIcon /> Bulk Queue</button>
+        <button onClick={() => setMode('crawl')} className={`inline-flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === 'crawl' ? 'bg-accent/15 text-accent border border-accent/20' : 'text-text-muted hover:text-text-primary border border-transparent'}`}><CrawlIcon /> Crawl Novel</button>
       </div>
 
       <div className="card flex items-center justify-between gap-4 py-3">
         <div>
-          <p className="text-sm font-medium text-text-primary">🔥 Use Firecrawl</p>
+          <p className="text-sm font-medium text-text-primary"><span className="inline-flex items-center gap-1.5"><FlameIcon className="w-4 h-4 text-warning" /> Use Firecrawl</span></p>
           <p className="text-xs text-text-muted">
             Renders JavaScript &amp; bypasses anti-bot protection. Uses Firecrawl credits and requires an API key in Settings.
           </p>
@@ -210,7 +211,7 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
           aria-checked={useFirecrawl}
           onClick={() => setUseFirecrawl(!useFirecrawl)}
           disabled={isProcessing}
-          className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${useFirecrawl ? 'bg-accent' : 'bg-bg-elevated border border-border'}`}
+          className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 cursor-pointer ${useFirecrawl ? 'bg-accent' : 'bg-bg-elevated border border-border'}`}
         >
           <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${useFirecrawl ? 'translate-x-5' : ''}`} />
         </button>
@@ -221,11 +222,11 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
           <div className="card">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-text-primary">Novel Index Crawler</h3>
-              <button 
-                onClick={() => setManualIndexMode(!manualIndexMode)} 
-                className={`text-xs px-3 py-1.5 rounded-lg ${manualIndexMode ? 'bg-warning/15 text-warning border border-warning/20' : 'text-text-muted bg-bg-elevated'}`}
+              <button
+                onClick={() => setManualIndexMode(!manualIndexMode)}
+                className={`inline-flex items-center gap-1.5 cursor-pointer text-xs px-3 py-1.5 rounded-lg ${manualIndexMode ? 'bg-warning/15 text-warning border border-warning/20' : 'text-text-muted bg-bg-elevated border border-transparent'}`}
               >
-                {manualIndexMode ? '🔗 URL Mode' : '📝 Manual Paste HTML'}
+                {manualIndexMode ? <><LinkIcon className="w-3.5 h-3.5" /> URL Mode</> : <><DocumentTextIcon className="w-3.5 h-3.5" /> Manual Paste HTML</>}
               </button>
             </div>
             
@@ -263,14 +264,14 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
               )}
             </div>
             
-            {error && <div className="mt-3 p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm">⚠️ {error}</div>}
+            {error && <div className="mt-3 p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm"><span className="inline-flex items-start gap-2"><AlertIcon className="w-4 h-4 mt-0.5 flex-shrink-0" /> {error}</span></div>}
           </div>
           <button 
             onClick={handleCrawlIndex} 
             disabled={isProcessing || (!urlInput && !manualIndexHtml)} 
             className="btn-primary w-full justify-center py-3 text-base"
           >
-            {isProcessing ? <><div className="spinner" /> Processing...</> : <>🕷️ {manualIndexMode ? 'Extract Chapters from HTML' : 'Crawl & Discover Chapters'}</>}
+            {isProcessing ? <><div className="spinner" /> Processing...</> : <><CrawlIcon className="w-5 h-5" /> {manualIndexMode ? 'Extract Chapters from HTML' : 'Crawl & Discover Chapters'}</>}
           </button>
         </div>
       )}
@@ -292,10 +293,10 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
             <div className="card space-y-3">
               <div className="flex items-center justify-between"><span className="text-sm font-medium">Processing {bulkProgress.current}/{bulkProgress.total}</span><span className="text-xs text-text-muted">{Math.round((bulkProgress.results.length / bulkProgress.total) * 100)}%</span></div>
               <div className="w-full h-2 bg-bg-primary rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-accent to-purple-500 rounded-full transition-all duration-500" style={{ width: `${(bulkProgress.results.length / bulkProgress.total) * 100}%` }} /></div>
-              <div className="space-y-1 max-h-40 overflow-y-auto">{bulkProgress.results.map((r, i) => <div key={i} className="flex items-center gap-2 text-xs"><span>{r.status === 'success' ? '✅' : '❌'}</span><span className="truncate text-text-muted">{r.url}</span>{r.message && <span className="text-error ml-auto">{r.message}</span>}</div>)}</div>
+              <div className="space-y-1 max-h-40 overflow-y-auto">{bulkProgress.results.map((r, i) => <div key={i} className="flex items-center gap-2 text-xs"><span>{r.status === 'success' ? <CheckCircleIcon className="w-3.5 h-3.5 text-success flex-shrink-0" /> : <XCircleIcon className="w-3.5 h-3.5 text-error flex-shrink-0" />}</span><span className="truncate text-text-muted">{r.url}</span>{r.message && <span className="text-error ml-auto">{r.message}</span>}</div>)}</div>
             </div>
           )}
-          <button onClick={handleBulkProcess} disabled={isProcessing || !selectedProjectId || !bulkUrls} className="btn-primary w-full justify-center py-3 text-base">{isProcessing ? <><div className="spinner" /> Processing...</> : <>📚 Start Bulk Fetching</>}</button>
+          <button onClick={handleBulkProcess} disabled={isProcessing || !selectedProjectId || !bulkUrls} className="btn-primary w-full justify-center py-3 text-base">{isProcessing ? <><div className="spinner" /> Processing...</> : <><QueueIcon className="w-5 h-5" /> Start Bulk Fetching</>}</button>
         </div>
       )}
 
@@ -304,10 +305,10 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
           <div className="card">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">Input</h3>
-              <button onClick={() => setManualMode(!manualMode)} className={`text-xs px-3 py-1.5 rounded-lg ${manualMode ? 'bg-warning/15 text-warning border border-warning/20' : 'text-text-muted bg-bg-elevated'}`}>{manualMode ? '🔗 URL Mode' : '📝 Manual Paste'}</button>
+              <button onClick={() => setManualMode(!manualMode)} className={`inline-flex items-center gap-1.5 cursor-pointer text-xs px-3 py-1.5 rounded-lg ${manualMode ? 'bg-warning/15 text-warning border border-warning/20' : 'text-text-muted bg-bg-elevated border border-transparent'}`}>{manualMode ? <><LinkIcon className="w-3.5 h-3.5" /> URL Mode</> : <><DocumentTextIcon className="w-3.5 h-3.5" /> Manual Paste</>}</button>
             </div>
             {!manualMode ? <input type="url" value={urlInput} onChange={e => setUrlInput(e.target.value)} className="input-field" placeholder="Paste chapter URL..." disabled={isProcessing} /> : <textarea value={manualText} onChange={e => setManualText(e.target.value)} className="input-field h-48 resize-none font-mono text-sm" placeholder="Paste raw chapter text or HTML..." disabled={isProcessing} />}
-            {error && <div className="mt-3 p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm">⚠️ {error}</div>}
+            {error && <div className="mt-3 p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm"><span className="inline-flex items-start gap-2"><AlertIcon className="w-4 h-4 mt-0.5 flex-shrink-0" /> {error}</span></div>}
           </div>
 
           <div className="card">
@@ -315,16 +316,16 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
             <select value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)} className="input-field" disabled={isProcessing}><option value="">Select a project...</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select>
           </div>
 
-          <button onClick={handleProcess} disabled={isProcessing || (!urlInput && !manualText) || !selectedProjectId} className="btn-primary w-full justify-center py-3.5 text-base glow-accent">{isProcessing ? <><div className="spinner" /> Processing...</> : <>✨ Fetch &amp; Clean Chapter</>}</button>
+          <button onClick={handleProcess} disabled={isProcessing || (!urlInput && !manualText) || !selectedProjectId} className="btn-primary w-full justify-center py-3.5 text-base glow-accent">{isProcessing ? <><div className="spinner" /> Processing...</> : <><SparklesIcon className="w-5 h-5" /> Fetch &amp; Clean Chapter</>}</button>
 
-          {steps.length > 0 && <div className="card space-y-2">{steps.map(step => <div key={step.id} className={`flex items-center gap-3 py-2 px-3 rounded-lg text-sm ${step.status === 'active' ? 'bg-accent/10 text-accent' : step.status === 'done' ? 'text-success' : step.status === 'error' ? 'text-error' : 'text-text-muted'}`}>{step.status === 'active' ? <div className="spinner" /> : step.status === 'done' ? <span>✅</span> : step.status === 'error' ? <span>❌</span> : <span className="opacity-40">{step.emoji}</span>}<span className={step.status === 'active' ? 'pulse-dot' : ''}>{step.label}</span></div>)}</div>}
+          {steps.length > 0 && <div className="card space-y-2">{steps.map(step => <div key={step.id} className={`flex items-center gap-3 py-2 px-3 rounded-lg text-sm ${step.status === 'active' ? 'bg-accent/10 text-accent' : step.status === 'done' ? 'text-success' : step.status === 'error' ? 'text-error' : 'text-text-muted'}`}>{step.status === 'active' ? <div className="spinner" /> : step.status === 'done' ? <CheckCircleIcon className="w-4 h-4" /> : step.status === 'error' ? <XCircleIcon className="w-4 h-4" /> : <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40" />}<span className={step.status === 'active' ? 'pulse-dot' : ''}>{step.label}</span></div>)}</div>}
 
           {cleanedText && (
             <div className="animate-fade-in space-y-4">
               <div className="card">
                 <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">Cleaned Output</h3><span className="text-xs text-text-muted">{wordCount.toLocaleString()} words</span></div>
                 <div ref={outputRef} className="chapter-output max-h-[500px] overflow-y-auto p-6 rounded-xl bg-bg-primary border border-border">{cleanedText.split('\n').map((p, i) => <p key={i}>{p}</p>)}</div>
-                <div className="flex gap-3 mt-4"><button onClick={handleCopy} className="btn-primary">📋 Copy to Clipboard</button><button onClick={handleReset} className="btn-secondary">Process Another</button></div>
+                <div className="flex gap-3 mt-4"><button onClick={handleCopy} className="btn-primary"><ClipboardIcon /> Copy to Clipboard</button><button onClick={handleReset} className="btn-secondary">Process Another</button></div>
               </div>
             </div>
           )}
