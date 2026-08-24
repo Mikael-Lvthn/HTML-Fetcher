@@ -184,8 +184,9 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
       }
       setPastingId(null);
       setHtmlToPaste('');
-    } catch (error: any) {
-      toast.error(`Cleaning failed: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Cleaning failed: ${message}`);
     } finally {
       setIsCleaning(false);
     }
@@ -270,7 +271,7 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
 
       {/* Chapter List */}
       <div className="space-y-3">
-        {filtered.map((chapter, index) => {
+        {filtered.map(chapter => {
           const defaultTitle = `Chapter ${chapters.length - chapters.indexOf(chapter)}`;
           const { title, body } = getChapterTitleAndBody(chapter.cleaned_text, defaultTitle);
           const isSelected = selectedIds.has(chapter.id);

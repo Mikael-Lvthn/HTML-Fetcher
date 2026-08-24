@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase';
 import Header from '@/components/Header';
 import { UserSettings, AppSettings } from '@/types';
 import toast from 'react-hot-toast';
+import { GlobeIcon, FlameIcon, AlertIcon } from '@/components/icons';
 
 interface Props {
   userEmail: string;
@@ -95,7 +96,7 @@ export default function SettingsClient({ userEmail, settings, appSettings }: Pro
 
         {/* Scraper Settings */}
         <section className="card">
-          <h2 className="text-base font-semibold text-text-primary mb-3">🕸️ Scraper Settings</h2>
+          <h2 className="text-base font-semibold text-text-primary mb-3"><span className="inline-flex items-center gap-2"><GlobeIcon className="w-5 h-5 text-accent" /> Scraper Settings</span></h2>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1.5">
@@ -123,7 +124,7 @@ export default function SettingsClient({ userEmail, settings, appSettings }: Pro
 
         {/* Firecrawl Engine */}
         <section className="card">
-          <h2 className="text-base font-semibold text-text-primary mb-3">🔥 Firecrawl Engine</h2>
+          <h2 className="text-base font-semibold text-text-primary mb-3"><span className="inline-flex items-center gap-2"><FlameIcon className="w-5 h-5 text-warning" /> Firecrawl Engine</span></h2>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1.5">
@@ -152,7 +153,7 @@ export default function SettingsClient({ userEmail, settings, appSettings }: Pro
 
         {/* Danger Zone */}
         <section className="card border-error/20">
-          <h2 className="text-base font-semibold text-error mb-2">⚠️ Danger Zone</h2>
+          <h2 className="text-base font-semibold text-error mb-2"><span className="inline-flex items-center gap-2"><AlertIcon className="w-5 h-5" /> Danger Zone</span></h2>
           <p className="text-xs text-text-muted mb-4">
             Deleting your account will permanently remove all your novels and saved chapters.
           </p>

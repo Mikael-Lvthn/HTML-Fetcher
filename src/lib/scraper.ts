@@ -114,7 +114,7 @@ export function cleanChapterHtml(html: string): string {
       if (body && typeof body === 'string' && body.length > 100) {
         return finalizeText(body);
       }
-    } catch (e) {
+    } catch {
       console.error('Failed to parse __NEXT_DATA__');
     }
   }

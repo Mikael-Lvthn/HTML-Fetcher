@@ -22,7 +22,8 @@ export async function POST(request: NextRequest) {
     // For now, scraper.ts uses its own fetch, let's update it to accept cookies
     const data = await crawlNovelIndex(url || '', rawHtml, scraperCookies);
     return Response.json(data);
-  } catch (error: any) {
-    return Response.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return Response.json({ error: message }, { status: 500 });
   }
 }

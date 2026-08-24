@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
-import Header from '@/components/Header';
 import ChapterHistory from '@/components/ChapterHistory';
 import { Project, Chapter } from '@/types';
 import toast from 'react-hot-toast';
@@ -209,10 +208,6 @@ stealthCrawler();`}</pre>
               </p>
               <button 
                 onClick={() => {
-                  const startInput = document.getElementById('crawl-start') as HTMLInputElement;
-                  const endInput = document.getElementById('crawl-end') as HTMLInputElement;
-                  const startIdx = startInput?.value || '1';
-                  const endIdx = endInput?.value || '50';
                   const code = `async function stealthCrawler() { const projectId = "${project.id}"; const startInput = document.getElementById('crawl-start'); const endInput = document.getElementById('crawl-end'); const startIdx = parseInt(startInput?.value || '1') - 1; const endIdx = parseInt(endInput?.value || '50'); const links = Array.from(document.querySelectorAll('a')).filter(a => a.href.toLowerCase().includes('/chapter/') || a.href.toLowerCase().includes('/chapter-')).map(a => ({ title: a.innerText.trim(), url: a.href })); const uniqueLinks = Array.from(new Map(links.map(l => [l.url, l])).values()).slice(startIdx, endIdx); const overlay = document.createElement('div'); overlay.style.position = 'fixed'; overlay.style.top = '10px'; overlay.style.left = '10px'; overlay.style.zIndex = '99999'; overlay.style.background = '#000'; overlay.style.color = '#0f0'; overlay.style.padding = '15px'; overlay.style.border = '2px solid #0f0'; overlay.style.fontFamily = 'monospace'; document.body.appendChild(overlay); for (let i = 0; i < uniqueLinks.length; i++) { const link = uniqueLinks[i]; overlay.innerHTML = \`<div style="font-weight:bold;margin-bottom:5px">SUPER CRAWLER ACTIVE</div><div>[ \${i+1} / \${uniqueLinks.length} ]</div><div style="color:#aaa">Loading: \${link.title}</div>\`; const win = window.open(link.url, '_blank'); if (!win) { alert('Please allow popups!'); break; } await new Promise(r => setTimeout(r, 10000)); try { const html = win.document.documentElement.innerHTML; if (html.includes('Security Check')) { alert('CAPTCHA detected!'); break; } await fetch('http://localhost:3000/api/ingest-browser-content', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, url: link.url, html, title: link.title }) }); win.close(); } catch (e) { console.error(e); } await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000)); } overlay.innerText = '✅ Batch complete!'; } stealthCrawler();`;
                   navigator.clipboard.writeText(code);
                   toast.success('Batch script copied!');

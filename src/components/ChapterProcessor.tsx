@@ -98,8 +98,9 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
         if (saveErr) toast.error('Cleaned but failed to save'); else toast.success('Chapter saved!');
       }
       updateStep('save', 'done');
-    } catch (err: any) {
-      setError(err.message); toast.error(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message); toast.error(message);
     } finally { setIsProcessing(false); }
   };
 
@@ -135,8 +136,9 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
         }
 
         setBulkProgress(prev => ({ ...prev!, results: [...prev!.results, { url: urls[i], status: 'success' }] }));
-      } catch (err: any) {
-        setBulkProgress(prev => ({ ...prev!, results: [...prev!.results, { url: urls[i], status: 'error', message: err.message }] }));
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        setBulkProgress(prev => ({ ...prev!, results: [...prev!.results, { url: urls[i], status: 'error', message }] }));
       }
     }
     toast.success('Bulk processing complete!');
@@ -164,13 +166,14 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       
-      const urls = data.chapters.map((c: any) => c.url).join('\n');
+      const urls = (data.chapters as { url: string }[]).map(c => c.url).join('\n');
       setBulkUrls(urls);
       setMode('bulk');
       toast.success(`Discovered ${data.chapters.length} chapters!`);
-    } catch (err: any) {
-      setError(err.message);
-      toast.error(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message);
+      toast.error(message);
     } finally {
       setIsProcessing(false);
     }

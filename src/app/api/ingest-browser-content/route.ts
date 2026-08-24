@@ -1,4 +1,7 @@
 import { NextRequest } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import fs from 'fs';
+import path from 'path';
 import { cleanChapterHtml } from '@/lib/scraper';
 
 export async function OPTIONS() {
@@ -11,10 +14,6 @@ export async function OPTIONS() {
     },
   });
 }
-
-import { createClient } from '@supabase/supabase-js';
-import fs from 'fs';
-import path from 'path';
 
 export async function POST(request: NextRequest) {
   try {
@@ -98,9 +97,10 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json'
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Ingest API] Crash:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: {
         'Access-Control-Allow-Origin': '*',
