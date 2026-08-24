@@ -104,22 +104,68 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
     toast.success('Chapter copied to clipboard!');
   };
 
-  const exportAll = () => {
-    const content = chapters.map((c, i) => {
-      const defaultTitle = `Chapter ${chapters.length - i}`;
-      const { title, body } = getChapterTitleAndBody(c.cleaned_text, defaultTitle);
-      const header = `=== ${title} ===\nURL: ${c.chapter_url || 'Manual paste'}\nDate: ${new Date(c.detected_at).toLocaleDateString()}\nWords: ${c.word_count}\n\n`;
-      return header + body;
-    }).join('\n\n' + '='.repeat(60) + '\n\n');
-
-    const blob = new Blob([content], { type: 'text/plain' });
+  const downloadMarkdownFile = (filename: string, content: string) => {
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `chapters-export-${new Date().toISOString().split('T')[0]}.txt`;
+    a.download = filename;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success('Chapters exported!');
+  };
+
+  const exportMarkdown = async () => {
+    const targetChapters = selectedIds.size > 0
+      ? chapters.filter(c => selectedIds.has(c.id))
+      : chapters;
+
+    if (targetChapters.length === 0) {
+      toast.error('No chapters to export');
+      return;
+    }
+
+    // Sort chapters in chronological order (Chapter 1 -> Chapter N)
+    const sorted = [...targetChapters].reverse();
+    const chunkSize = 50;
+    const totalChunks = Math.ceil(sorted.length / chunkSize);
+
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = sorted.slice(i * chunkSize, (i + 1) * chunkSize);
+      const startNum = i * chunkSize + 1;
+      const endNum = i * chunkSize + chunk.length;
+
+      const fileContent = chunk.map((c, chunkIdx) => {
+        const overallNum = startNum + chunkIdx;
+        const defaultTitle = `Chapter ${overallNum}`;
+        const { title, body } = getChapterTitleAndBody(c.cleaned_text, defaultTitle);
+        
+        const metadataLines = [
+          c.chapter_url ? `**Source:** [${c.chapter_url}](${c.chapter_url})` : '**Source:** Manual paste',
+          `**Date:** ${new Date(c.detected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+          c.word_count ? `**Words:** ${c.word_count.toLocaleString()}` : null,
+        ].filter(Boolean).join('  \n');
+
+        return `# ${title}\n\n${metadataLines}\n\n---\n\n${body}`;
+      }).join('\n\n\n' + '---' + '\n\n\n');
+
+      const fileName = totalChunks === 1 
+        ? `chapters-${startNum}-${endNum}.md`
+        : `chapters-${String(startNum).padStart(3, '0')}-${String(endNum).padStart(3, '0')}.md`;
+
+      downloadMarkdownFile(fileName, fileContent);
+
+      if (i < totalChunks - 1) {
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
+
+    toast.success(
+      totalChunks === 1
+        ? `Exported ${sorted.length} chapters to .md file!`
+        : `Exported ${sorted.length} chapters across ${totalChunks} .md files (50 per file)!`
+    );
   };
 
   const confirmDelete = () => {
@@ -263,8 +309,8 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
               🗑 Delete Selected ({selectedIds.size})
             </button>
           )}
-          <button onClick={exportAll} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
-            📥 Export All
+          <button onClick={exportMarkdown} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
+            📥 {selectedIds.size > 0 ? `Export Selected (${selectedIds.size})` : 'Export All'} (.md)
           </button>
         </div>
       </div>
