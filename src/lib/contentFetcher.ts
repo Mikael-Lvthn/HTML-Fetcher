@@ -26,16 +26,32 @@ export interface ReaderResult {
 }
 
 function serverFetch(url: string, cookies?: string, signal?: AbortSignal) {
+  let origin = '';
+  try {
+    origin = new URL(url).origin;
+  } catch {}
+
+  const headers: Record<string, string> = {
+    'User-Agent': USER_AGENT,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'same-origin',
+    'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1',
+  };
+
+  if (origin) {
+    headers['Referer'] = origin + '/';
+  }
+  if (cookies) {
+    headers['Cookie'] = cookies;
+  }
+
   return fetch(url, {
     signal,
-    headers: {
-      'User-Agent': USER_AGENT,
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Referer': 'https://wtr-lab.com/',
-      'Origin': 'https://wtr-lab.com',
-      ...(cookies ? { 'Cookie': cookies } : {})
-    }
+    headers
   });
 }
 
