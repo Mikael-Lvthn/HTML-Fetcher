@@ -85,7 +85,8 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
       updateStep('save', 'active');
       const wc = finalCleaned.split(/\s+/).filter(Boolean).length;
       setWordCount(wc);
-      const { data: { user } } = await supabase.auth.getUser();
+      const authRes = await supabase.auth.getUser();
+      const user = authRes?.data?.user;
       if (user) {
         const { error: saveErr } = await supabase.from('chapters').insert({ 
           user_id: user.id, 
@@ -124,7 +125,8 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
         if (data.error) throw new Error(data.error);
 
         const cleaned = data.cleanedText;
-        const { data: { user } } = await supabase.auth.getUser();
+        const bulkAuthRes = await supabase.auth.getUser();
+        const user = bulkAuthRes?.data?.user;
         if (user) {
           await supabase.from('chapters').insert({ 
             user_id: user.id, 

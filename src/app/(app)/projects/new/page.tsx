@@ -20,8 +20,9 @@ export default function NewProjectPage() {
     e.preventDefault();
     if (!title.trim()) { toast.error('Title is required'); return; }
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { toast.error('Not logged in'); return; }
+    const authRes = await supabase.auth.getUser();
+    const user = authRes?.data?.user;
+    if (!user) { toast.error('You must be logged in'); return; }
 
     const { data, error } = await supabase.from('projects').insert({
       user_id: user.id,

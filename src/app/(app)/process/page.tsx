@@ -5,7 +5,8 @@ import ProcessClient from './ProcessClient';
 export default async function ProcessPage({ searchParams }: { searchParams: Promise<{ project?: string }> }) {
   const { project: preselectedProject } = await searchParams;
   const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const authRes = await supabase.auth.getUser();
+  const user = authRes?.data?.user;
   if (!user) redirect('/auth/login');
 
   const { data: projects } = await supabase.from('projects').select('*').eq('user_id', user.id).order('title');

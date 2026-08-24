@@ -6,32 +6,40 @@ import { createServerSupabaseClient } from '@/lib/supabase-server';
 export async function POST(request: NextRequest) {
   try {
     const { url, rawHtml, useFirecrawl } = await request.json();
-    const supabase = await createServerSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
 
-    let scraperCookies = '';
-    if (user) {
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('scraper_cookies')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (settings?.scraper_cookies) {
-        scraperCookies = settings.scraper_cookies;
-        console.log(`[Clean API] Using cookies: ${scraperCookies.substring(0, 20)}...`);
-      } else {
-        console.log('[Clean API] No scraper cookies found in settings');
-      }
+    if (!url && !rawHtml) {
+      return Response.json({ error: 'No content provided' }, { status: 400 });
     }
 
+    let scraperCookies = '';
     let firecrawlKey: string | undefined;
-    if (useFirecrawl) {
-      const { data: appSettings } = await supabase
-        .from('app_settings')
-        .select('firecrawl_api_key')
-        .eq('id', 1)
-        .maybeSingle();
-      firecrawlKey = appSettings?.firecrawl_api_key || undefined;
+
+    try {
+      const supabase = await createServerSupabaseClient();
+      const authRes = await supabase.auth.getUser();
+      const user = authRes?.data?.user;
+
+      if (user) {
+        const { data: settings } = await supabase
+          .from('user_settings')
+          .select('scraper_cookies')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (settings?.scraper_cookies) {
+          scraperCookies = settings.scraper_cookies;
+        }
+      }
+
+      if (useFirecrawl) {
+        const { data: appSettings } = await supabase
+          .from('app_settings')
+          .select('firecrawl_api_key')
+          .eq('id', 1)
+          .maybeSingle();
+        firecrawlKey = appSettings?.firecrawl_api_key || undefined;
+      }
+    } catch (authErr) {
+      console.warn('[Clean API] Supabase check bypassed:', authErr);
     }
 
     let html = rawHtml;

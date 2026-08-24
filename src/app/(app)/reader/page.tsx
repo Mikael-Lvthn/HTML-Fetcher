@@ -4,7 +4,8 @@ import ReaderClient from './ReaderClient';
 
 export default async function ReaderPage() {
   const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const authRes = await supabase.auth.getUser();
+  const user = authRes?.data?.user;
   if (!user) redirect('/auth/login');
 
   return <ReaderClient />;

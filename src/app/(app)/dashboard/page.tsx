@@ -4,7 +4,8 @@ import DashboardClient from './DashboardClient';
 
 export default async function DashboardPage() {
   const supabase = await createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const authRes = await supabase.auth.getUser();
+  const user = authRes?.data?.user;
   if (!user) redirect('/auth/login');
 
   // Fetch projects with chapter counts

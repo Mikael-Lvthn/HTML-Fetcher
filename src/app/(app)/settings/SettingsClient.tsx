@@ -30,7 +30,8 @@ export default function SettingsClient({ userEmail, settings, appSettings }: Pro
   };
 
   const handleDeleteAccount = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const authRes = await supabase.auth.getUser();
+    const user = authRes?.data?.user;
     if (!user) return;
 
     // Delete all user data
@@ -45,7 +46,8 @@ export default function SettingsClient({ userEmail, settings, appSettings }: Pro
 
   const handleSaveSettings = async () => {
     setIsSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
+    const authRes = await supabase.auth.getUser();
+    const user = authRes?.data?.user;
     if (!user) return;
 
     const { error } = await supabase
