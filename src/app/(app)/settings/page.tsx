@@ -11,13 +11,13 @@ export default async function SettingsPage() {
     .from('user_settings')
     .select('*')
     .eq('user_id', user.id)
-    .single();
+    .maybeSingle();
 
   const { data: appSettings } = await supabase
     .from('app_settings')
     .select('firecrawl_api_key')
     .eq('id', 1)
-    .single();
+    .maybeSingle();
 
   return (
     <SettingsClient

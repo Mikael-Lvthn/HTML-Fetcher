@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
         .from('user_settings')
         .select('scraper_cookies')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
       if (settings?.scraper_cookies) {
         scraperCookies = settings.scraper_cookies;
         console.log(`[Clean API] Using cookies: ${scraperCookies.substring(0, 20)}...`);
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
         .from('app_settings')
         .select('firecrawl_api_key')
         .eq('id', 1)
-        .single();
+        .maybeSingle();
       firecrawlKey = appSettings?.firecrawl_api_key || undefined;
     }
 
@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
     const cleanedText = cleanChapterHtml(html);
     return Response.json({ cleanedText });
   } catch (error) {
+    console.error('[Clean API Error]:', error);
     const message = error instanceof Error ? error.message : 'Failed to clean chapter';
     return Response.json({ error: message }, { status: 500 });
   }

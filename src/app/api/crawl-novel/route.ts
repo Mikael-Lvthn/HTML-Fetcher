@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
         .from('user_settings')
         .select('scraper_cookies')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
       if (settings?.scraper_cookies) scraperCookies = settings.scraper_cookies;
     }
     

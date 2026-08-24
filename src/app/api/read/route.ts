@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
         .from('app_settings')
         .select('firecrawl_api_key')
         .eq('id', 1)
-        .single();
+        .maybeSingle();
       firecrawlKey = appSettings?.firecrawl_api_key || undefined;
     }
 

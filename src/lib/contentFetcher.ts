@@ -75,7 +75,12 @@ export async function fetchRenderedHtml(url: string, opts: FetchOptions): Promis
   }
 
   const res = await serverFetch(url, opts.cookies, opts.signal);
-  if (!res.ok) throw new Error(`Failed to fetch chapter: ${res.status}`);
+  if (!res.ok) {
+    if (res.status === 403 || res.status === 503) {
+      throw new Error(`Target site blocked automated fetch (HTTP ${res.status} Cloudflare / Anti-bot). Please enable "Use Firecrawl", provide cookies in Settings, or use Manual Paste.`);
+    }
+    throw new Error(`Failed to fetch chapter: HTTP ${res.status}`);
+  }
   return res.text();
 }
 
