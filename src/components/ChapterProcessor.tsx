@@ -162,7 +162,8 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify({ 
           url: urlInput,
-          rawHtml: manualIndexMode ? manualIndexHtml : undefined
+          rawHtml: manualIndexMode ? manualIndexHtml : undefined,
+          useFirecrawl
         }) 
       });
       const data = await res.json();

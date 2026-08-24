@@ -34,7 +34,18 @@ async function fetchWithHeaders(url: string, cookies?: string) {
   return fetch(url, { headers });
 }
 
-export async function crawlNovelIndex(rootUrl: string, rawHtml?: string, cookies?: string): Promise<{ title: string; chapters: ChapterLink[] }> {
+export interface CrawlOptions {
+  cookies?: string;
+  useFirecrawl?: boolean;
+  firecrawlKey?: string;
+}
+
+export async function crawlNovelIndex(
+  rootUrl: string, 
+  rawHtml?: string, 
+  opts?: CrawlOptions | string
+): Promise<{ title: string; chapters: ChapterLink[] }> {
+  const options: CrawlOptions = typeof opts === 'string' ? { cookies: opts } : (opts || {});
   let normalizedUrl = (rootUrl || '').trim();
   if (normalizedUrl && !/^https?:\/\//i.test(normalizedUrl)) {
     normalizedUrl = `https://${normalizedUrl}`;
@@ -49,14 +60,30 @@ export async function crawlNovelIndex(rootUrl: string, rawHtml?: string, cookies
   
   let html = rawHtml;
   if (!html && normalizedUrl) {
-    const res = await fetchWithHeaders(normalizedUrl, cookies);
-    if (!res.ok) {
-      if (res.status === 403 || res.status === 503) {
-        throw new Error(`Target site blocked index fetch (HTTP ${res.status} Anti-bot). Use "Manual Paste HTML" tab to paste the Table of Contents source.`);
+    if (options.useFirecrawl && options.firecrawlKey) {
+      const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${options.firecrawlKey}`
+        },
+        body: JSON.stringify({ url: normalizedUrl, formats: ['rawHtml'], waitFor: 6000 })
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body?.success) {
+        throw new Error(`Firecrawl crawl failed: ${body?.error || `HTTP ${res.status}`}`);
       }
-      throw new Error(`Failed to fetch index: HTTP ${res.status}`);
+      html = body.data?.rawHtml;
+    } else {
+      const res = await fetchWithHeaders(normalizedUrl, options.cookies);
+      if (!res.ok) {
+        if (res.status === 403 || res.status === 503) {
+          throw new Error(`Target site blocked index fetch (HTTP ${res.status} Anti-bot). Please enable "Use Firecrawl", provide cookies in Settings, or use "Manual Paste HTML".`);
+        }
+        throw new Error(`Failed to fetch index: HTTP ${res.status}`);
+      }
+      html = await res.text();
     }
-    html = await res.text();
   }
 
   if (!html) throw new Error('No content found to crawl');
@@ -119,7 +146,7 @@ export async function crawlNovelIndex(rootUrl: string, rawHtml?: string, cookies
 
   for (const pageUrl of pageLinks) {
     try {
-      const pRes = await fetchWithHeaders(pageUrl, cookies);
+      const pRes = await fetchWithHeaders(pageUrl, options.cookies);
       if (pRes.ok) {
         const pHtml = await pRes.text();
         extractPageChapters(pHtml);
