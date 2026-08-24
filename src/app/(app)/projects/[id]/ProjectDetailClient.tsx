@@ -22,15 +22,79 @@ export default function ProjectDetailClient({ project: initialProject, chapters:
   const [editTitle, setEditTitle] = useState(project.title);
   const [editSubtitle, setEditSubtitle] = useState(project.subtitle || '');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [appUrl, setAppUrl] = useState('');
   const [startCh, setStartCh] = useState('1');
   const [endCh, setEndCh] = useState('50');
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setAppUrl(window.location.origin);
+  const getCrawlerScript = (serverOrigin?: string) => `async function stealthCrawler() {
+  const projectId = "${project.id}";
+  const startIdx = parseInt("${startCh || '1'}") - 1;
+  const endIdx = parseInt("${endCh || '50'}");
+  const targetServer = "${serverOrigin || (typeof window !== 'undefined' ? window.location.origin : 'https://html-fetcher-plum.vercel.app')}";
+  
+  const links = Array.from(document.querySelectorAll('a'))
+    .filter(a => {
+      const href = a.href.toLowerCase();
+      return href.includes('/chapter/') || href.includes('/chapter-') || /_\\d+\\.html/.test(href) || a.innerText.toLowerCase().includes('chapter');
+    })
+    .map(a => ({ title: a.innerText.trim(), url: a.href }));
+
+  const uniqueLinks = Array.from(new Map(links.map(l => [l.url, l])).values())
+    .slice(startIdx, endIdx);
+
+  console.log(\`🚀 Popup Crawler: Processing \${uniqueLinks.length} chapters\`);
+
+  const overlay = document.createElement('div');
+  overlay.style.position = 'fixed'; overlay.style.top = '10px'; overlay.style.left = '10px';
+  overlay.style.zIndex = '99999'; overlay.style.background = '#000'; overlay.style.color = '#0f0';
+  overlay.style.padding = '15px'; overlay.style.border = '2px solid #0f0'; overlay.style.fontFamily = 'monospace';
+  overlay.style.boxShadow = '0 0 20px rgba(0,255,0,0.3)';
+  document.body.appendChild(overlay);
+
+  for (let i = 0; i < uniqueLinks.length; i++) {
+    const link = uniqueLinks[i];
+    overlay.innerHTML = \`<div style="font-weight:bold;margin-bottom:5px">SUPER CRAWLER ACTIVE</div>
+                        <div>[ \${i+1} / \${uniqueLinks.length} ]</div>
+                        <div style="color:#aaa">Loading: \${link.title}</div>\`;
+    
+    const win = window.open(link.url, '_blank');
+    if (!win) {
+      overlay.style.background = 'red';
+      overlay.innerText = '🛑 POPUPS BLOCKED! Click "Allow" in address bar.';
+      alert('Please allow popups for this site to continue.');
+      break;
     }
-  }, []);
+
+    await new Promise(r => setTimeout(r, 6000)); 
+    
+    try {
+      const html = win.document.documentElement.innerHTML;
+      
+      if (html.includes('Security Check') || html.includes('cf-turnstile')) {
+        overlay.style.background = 'red';
+        overlay.innerText = '🛑 CAPTCHA detected in popup! Solve it manually.';
+        alert('CAPTCHA detected in the popup tab. Please solve it, then restart.');
+        break;
+      }
+
+      await fetch(\`\${targetServer}/api/ingest-browser-content\`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, url: link.url, html, title: link.title })
+      });
+      console.log(\`✅ Beamed \${link.title}\`);
+      win.close();
+    } catch (e) {
+      console.error('Failed to access popup content.', e);
+      overlay.innerText = '❌ Error accessing tab content.';
+    }
+    
+    await new Promise(r => setTimeout(r, 1500));
+  }
+  
+  overlay.innerText = '✅ Batch complete!';
+}
+
+stealthCrawler();`;
 
   const saveProjectDetails = async () => {
     const { error } = await supabase.from('projects').update({
@@ -147,7 +211,7 @@ export default function ProjectDetailClient({ project: initialProject, chapters:
           </div>
 
           <div className="bg-black/40 rounded-lg p-4 font-mono text-[11px] text-accent/90 overflow-x-auto max-h-64 mb-4">
-            <pre>{crawlerScript}</pre>
+            <pre>{getCrawlerScript()}</pre>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -156,7 +220,7 @@ export default function ProjectDetailClient({ project: initialProject, chapters:
             </p>
             <button 
               onClick={() => {
-                navigator.clipboard.writeText(crawlerScript);
+                navigator.clipboard.writeText(getCrawlerScript(window.location.origin));
                 toast.success('Automation script copied!');
               }}
               className="btn-secondary w-full"
