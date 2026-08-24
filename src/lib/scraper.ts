@@ -131,17 +131,16 @@ export async function crawlNovelIndex(
       let title = _$(el).text().trim();
       if (!href) return;
 
-      // Ignore common non-chapter navigation links
-      if (href.includes('?tab=') || href.includes('/updates') || href.includes('/category/') || href.includes('/genre/')) {
-        return;
-      }
+      // Ignore recommendation links to other novels (e.g. /novel/kks2748.html)
+      const isOtherNovelLink = href.includes('/novel/') && !/_\d+\.html/.test(href);
+      if (isOtherNovelLink) return;
 
       title = cleanTitle(title);
 
       const isChapterLink = 
         href.includes('/chapter/') || 
         /_\d+\.html/.test(href) || 
-        /\bchapter\b/i.test(title) ||
+        (/\bchapter\b/i.test(title) && !href.includes('/list/')) ||
         (isWtrLab && (_$(el).hasClass('chapter-item') || _$(el).hasClass('toc-latest-row')));
 
       if (isChapterLink) {
@@ -155,13 +154,25 @@ export async function crawlNovelIndex(
 
   extractPageChapters(html);
 
-  // Pagination detection (only look for actual pagination containers or query params)
+  // Pagination detection across all standard formats (fy.php, page=, /page/, etc.)
   const pageLinks: string[] = [];
-  $('.pagination a, .page-nav a, .nav-links a, ul.pager a').each((_, el) => {
+  $('a').each((_, el) => {
     const href = $(el).attr('href');
-    if (href && (href.includes('page=') || href.includes('/page/'))) {
+    if (!href) return;
+    const isPagination = 
+      href.includes('fy.php') ||
+      href.includes('fy1.php') ||
+      href.includes('page=') || 
+      href.includes('/page/') ||
+      href.includes('index_') ||
+      href.includes('page_');
+
+    const isChapterLink = /_\d+\.html/.test(href) || href.includes('/chapter/');
+    if (isPagination && !isChapterLink) {
       const fullUrl = href.startsWith('http') ? href : `${baseUrl}${href.startsWith('/') ? '' : '/'}${href}`;
-      if (!pageLinks.includes(fullUrl) && pageLinks.length < 10) pageLinks.push(fullUrl);
+      if (!pageLinks.includes(fullUrl) && pageLinks.length < 30) {
+        pageLinks.push(fullUrl);
+      }
     }
   });
 
@@ -174,6 +185,45 @@ export async function crawlNovelIndex(
       }
     } catch (e) {
       console.error(`Failed to fetch page ${pageUrl}`, e);
+    }
+  }
+
+  // Auto-resolve baseUrl if not provided from rootUrl
+  if (!baseUrl && html) {
+    const canonical = $('link[rel="canonical"]').attr('href') || $('meta[property="og:url"]').attr('content');
+    if (canonical && canonical.startsWith('http')) {
+      try { baseUrl = new URL(canonical).origin; } catch {}
+    }
+    if (!baseUrl) {
+      $('a[href^="http"]').each((_, el) => {
+        if (!baseUrl) {
+          try { baseUrl = new URL($(el).attr('href')!).origin; } catch {}
+        }
+      });
+    }
+    if (!baseUrl && html.includes('fanmtl.com')) {
+      baseUrl = 'https://www.fanmtl.com';
+    }
+  }
+
+  // Auto-complete sequential chapter gaps for sites like FanMTL (/novel/<id>_<num>.html)
+  let sequentialNovelId: string | null = null;
+  let maxChapterNum = 0;
+  for (const c of chapters) {
+    const match = c.url.match(/\/novel\/(\d+)_(\d+)\.html/);
+    if (match) {
+      sequentialNovelId = match[1];
+      const num = parseInt(match[2], 10);
+      if (num > maxChapterNum) maxChapterNum = num;
+    }
+  }
+
+  if (sequentialNovelId && maxChapterNum > chapters.length && maxChapterNum <= 5000 && baseUrl) {
+    for (let i = 1; i <= maxChapterNum; i++) {
+      const expectedUrl = `${baseUrl}/novel/${sequentialNovelId}_${i}.html`;
+      if (!chapters.find(c => c.url === expectedUrl)) {
+        chapters.push({ title: `Chapter ${i}`, url: expectedUrl });
+      }
     }
   }
 

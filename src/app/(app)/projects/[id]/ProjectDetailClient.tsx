@@ -22,6 +22,15 @@ export default function ProjectDetailClient({ project: initialProject, chapters:
   const [editTitle, setEditTitle] = useState(project.title);
   const [editSubtitle, setEditSubtitle] = useState(project.subtitle || '');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [appUrl, setAppUrl] = useState('');
+  const [startCh, setStartCh] = useState('1');
+  const [endCh, setEndCh] = useState('50');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setAppUrl(window.location.origin);
+    }
+  }, []);
 
   const saveProjectDetails = async () => {
     const { error } = await supabase.from('projects').update({
@@ -117,107 +126,45 @@ export default function ProjectDetailClient({ project: initialProject, chapters:
             If the automated server scraper is being blocked, use your own browser to &quot;beam&quot; chapters here.
           </p>
           <div className="flex gap-4 mb-4">
-              <div className="flex-1">
-                <label className="text-[10px] uppercase tracking-wider text-text-muted mb-1 block">Start Chapter #</label>
-                <input type="number" id="crawl-start" defaultValue="1" className="w-full bg-black/20 border border-white/10 rounded px-2 py-1 text-xs" />
-              </div>
-              <div className="flex-1">
-                <label className="text-[10px] uppercase tracking-wider text-text-muted mb-1 block">End Chapter #</label>
-                <input type="number" id="crawl-end" defaultValue="50" className="w-full bg-black/20 border border-white/10 rounded px-2 py-1 text-xs" />
-              </div>
+            <div className="flex-1">
+              <label className="text-[10px] uppercase tracking-wider text-text-muted mb-1 block">Start Chapter #</label>
+              <input 
+                type="number" 
+                value={startCh} 
+                onChange={e => setStartCh(e.target.value)} 
+                className="w-full bg-black/20 border border-white/10 rounded px-2 py-1 text-xs" 
+              />
             </div>
-
-            <div className="bg-black/40 rounded-lg p-4 font-mono text-[11px] text-accent/90 overflow-x-auto max-h-64">
-              <pre>{`async function stealthCrawler() {
-  const projectId = "${project.id}";
-  const startIdx = parseInt(document.getElementById('crawl-start')?.value || '1') - 1;
-  const endIdx = parseInt(document.getElementById('crawl-end')?.value || '50');
-  
-  const links = Array.from(document.querySelectorAll('a'))
-    .filter(a => {
-      const href = a.href.toLowerCase();
-      return href.includes('/chapter/') || href.includes('/chapter-') || a.innerText.toLowerCase().includes('chapter ');
-    })
-    .map(a => ({ title: a.innerText.trim(), url: a.href }));
-
-  const uniqueLinks = Array.from(new Map(links.map(l => [l.url, l])).values())
-    .slice(startIdx, endIdx);
-
-  console.log(\`🚀 Popup Crawler: Processing \${uniqueLinks.length} chapters\`);
-
-  // Create a visible progress overlay
-  const overlay = document.createElement('div');
-  overlay.style.position = 'fixed'; overlay.style.top = '10px'; overlay.style.left = '10px';
-  overlay.style.zIndex = '99999'; overlay.style.background = '#000'; overlay.style.color = '#0f0';
-  overlay.style.padding = '15px'; overlay.style.border = '2px solid #0f0'; overlay.style.fontFamily = 'monospace';
-  overlay.style.boxShadow = '0 0 20px rgba(0,255,0,0.3)';
-  document.body.appendChild(overlay);
-
-  for (let i = 0; i < uniqueLinks.length; i++) {
-    const link = uniqueLinks[i];
-    overlay.innerHTML = \`<div style="font-weight:bold;margin-bottom:5px">SUPER CRAWLER ACTIVE</div>
-                        <div>[ \${i+1} / \${uniqueLinks.length} ]</div>
-                        <div style="color:#aaa">Loading: \${link.title}</div>\`;
-    
-    // Open chapter in a new tab
-    const win = window.open(link.url, '_blank');
-    if (!win) {
-      overlay.style.background = 'red';
-      overlay.innerText = '🛑 POPUPS BLOCKED! Click "Allow" in address bar.';
-      alert('Please allow popups for this site to continue.');
-      break;
-    }
-
-    // Wait for the new tab to load and render (10 seconds for safety)
-    await new Promise(r => setTimeout(r, 10000)); 
-    
-    try {
-      const html = win.document.documentElement.innerHTML;
-      
-      if (html.includes('Security Check') || html.includes('cf-turnstile')) {
-        overlay.style.background = 'red';
-        overlay.innerText = '🛑 CAPTCHA detected in popup! Solve it manually.';
-        alert('CAPTCHA detected in the popup tab. Please solve it, then restart.');
-        break;
-      }
-
-      await fetch('http://localhost:3000/api/ingest-browser-content', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, url: link.url, html, title: link.title })
-      });
-      console.log(\`✅ Beamed \${link.title}\`);
-      win.close(); // Close the tab after beaming
-    } catch (e) {
-      console.error('Failed to access popup content. Ensure same-origin.', e);
-      overlay.innerText = '❌ Error accessing tab content.';
-    }
-    
-    // Random delay between 2-4 seconds before next tab
-    await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
-  }
-  
-  overlay.innerText = '✅ Batch complete!';
-}
-
-stealthCrawler();`}</pre>
-            </div>
-            <div className="flex flex-col gap-2">
-              <p className="text-xs text-text-muted italic">
-                Tip: If you see a CAPTCHA, open any chapter in a new tab, solve it, and then restart this script.
-              </p>
-              <button 
-                onClick={() => {
-                  const code = `async function stealthCrawler() { const projectId = "${project.id}"; const startInput = document.getElementById('crawl-start'); const endInput = document.getElementById('crawl-end'); const startIdx = parseInt(startInput?.value || '1') - 1; const endIdx = parseInt(endInput?.value || '50'); const links = Array.from(document.querySelectorAll('a')).filter(a => a.href.toLowerCase().includes('/chapter/') || a.href.toLowerCase().includes('/chapter-')).map(a => ({ title: a.innerText.trim(), url: a.href })); const uniqueLinks = Array.from(new Map(links.map(l => [l.url, l])).values()).slice(startIdx, endIdx); const overlay = document.createElement('div'); overlay.style.position = 'fixed'; overlay.style.top = '10px'; overlay.style.left = '10px'; overlay.style.zIndex = '99999'; overlay.style.background = '#000'; overlay.style.color = '#0f0'; overlay.style.padding = '15px'; overlay.style.border = '2px solid #0f0'; overlay.style.fontFamily = 'monospace'; document.body.appendChild(overlay); for (let i = 0; i < uniqueLinks.length; i++) { const link = uniqueLinks[i]; overlay.innerHTML = \`<div style="font-weight:bold;margin-bottom:5px">SUPER CRAWLER ACTIVE</div><div>[ \${i+1} / \${uniqueLinks.length} ]</div><div style="color:#aaa">Loading: \${link.title}</div>\`; const win = window.open(link.url, '_blank'); if (!win) { alert('Please allow popups!'); break; } await new Promise(r => setTimeout(r, 10000)); try { const html = win.document.documentElement.innerHTML; if (html.includes('Security Check')) { alert('CAPTCHA detected!'); break; } await fetch('http://localhost:3000/api/ingest-browser-content', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId, url: link.url, html, title: link.title }) }); win.close(); } catch (e) { console.error(e); } await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000)); } overlay.innerText = '✅ Batch complete!'; } stealthCrawler();`;
-                  navigator.clipboard.writeText(code);
-                  toast.success('Batch script copied!');
-                }}
-                className="btn-secondary w-full"
-              >
-                📋 Copy Full Automation Script
-              </button>
+            <div className="flex-1">
+              <label className="text-[10px] uppercase tracking-wider text-text-muted mb-1 block">End Chapter #</label>
+              <input 
+                type="number" 
+                value={endCh} 
+                onChange={e => setEndCh(e.target.value)} 
+                className="w-full bg-black/20 border border-white/10 rounded px-2 py-1 text-xs" 
+              />
             </div>
           </div>
+
+          <div className="bg-black/40 rounded-lg p-4 font-mono text-[11px] text-accent/90 overflow-x-auto max-h-64 mb-4">
+            <pre>{crawlerScript}</pre>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-text-muted italic">
+              Tip: Copy this script, open the novel Table of Contents page on FanMTL, open Browser Console (F12 $\rightarrow$ Console), paste and press Enter!
+            </p>
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(crawlerScript);
+                toast.success('Automation script copied!');
+              }}
+              className="btn-secondary w-full"
+            >
+              📋 Copy Automation Script
+            </button>
+          </div>
+        </div>
       </section>
 
       <section className="mt-8">
