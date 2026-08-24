@@ -35,13 +35,27 @@ async function fetchWithHeaders(url: string, cookies?: string) {
 }
 
 export async function crawlNovelIndex(rootUrl: string, rawHtml?: string, cookies?: string): Promise<{ title: string; chapters: ChapterLink[] }> {
-  const baseUrl = rootUrl ? new URL(rootUrl).origin : '';
-  const isWtrLab = rootUrl.includes('wtr-lab.com') || (rawHtml?.includes('wtr-lab.com'));
+  let normalizedUrl = (rootUrl || '').trim();
+  if (normalizedUrl && !/^https?:\/\//i.test(normalizedUrl)) {
+    normalizedUrl = `https://${normalizedUrl}`;
+  }
+
+  let baseUrl = '';
+  try {
+    if (normalizedUrl) baseUrl = new URL(normalizedUrl).origin;
+  } catch {}
+
+  const isWtrLab = normalizedUrl.includes('wtr-lab.com') || (rawHtml?.includes('wtr-lab.com'));
   
   let html = rawHtml;
-  if (!html && rootUrl) {
-    const res = await fetchWithHeaders(rootUrl, cookies);
-    if (!res.ok) throw new Error(`Failed to fetch index: ${res.status}`);
+  if (!html && normalizedUrl) {
+    const res = await fetchWithHeaders(normalizedUrl, cookies);
+    if (!res.ok) {
+      if (res.status === 403 || res.status === 503) {
+        throw new Error(`Target site blocked index fetch (HTTP ${res.status} Anti-bot). Use "Manual Paste HTML" tab to paste the Table of Contents source.`);
+      }
+      throw new Error(`Failed to fetch index: HTTP ${res.status}`);
+    }
     html = await res.text();
   }
 

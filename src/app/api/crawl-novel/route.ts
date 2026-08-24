@@ -18,11 +18,14 @@ export async function POST(request: NextRequest) {
       if (settings?.scraper_cookies) scraperCookies = settings.scraper_cookies;
     }
     
-    // Pass cookies to crawlNovelIndex if needed
-    // For now, scraper.ts uses its own fetch, let's update it to accept cookies
+    if (!url && !rawHtml) {
+      return Response.json({ error: 'Please provide either a novel URL or HTML content' }, { status: 400 });
+    }
+
     const data = await crawlNovelIndex(url || '', rawHtml, scraperCookies);
     return Response.json(data);
   } catch (error: unknown) {
+    console.error('[Crawl Novel API Error]:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
     return Response.json({ error: message }, { status: 500 });
   }
