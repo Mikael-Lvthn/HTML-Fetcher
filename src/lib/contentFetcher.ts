@@ -4,8 +4,6 @@ import { cleanChapterHtml } from '@/lib/scraper';
 
 const FIRECRAWL_SCRAPE_URL = 'https://api.firecrawl.dev/v1/scrape';
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-
 export interface FetchOptions {
   useFirecrawl: boolean;
   firecrawlKey?: string;
@@ -25,34 +23,57 @@ export interface ReaderResult {
   };
 }
 
-function serverFetch(url: string, cookies?: string, signal?: AbortSignal) {
+async function serverFetch(url: string, cookies?: string, signal?: AbortSignal) {
   let origin = '';
   try {
     origin = new URL(url).origin;
   } catch {}
 
-  const headers: Record<string, string> = {
-    'User-Agent': USER_AGENT,
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+  const baseHeaders: Record<string, string> = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.9',
-    'Sec-Fetch-Dest': 'document',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-Site': 'same-origin',
-    'Sec-Fetch-User': '?1',
     'Upgrade-Insecure-Requests': '1',
   };
 
-  if (origin) {
-    headers['Referer'] = origin + '/';
-  }
   if (cookies) {
-    headers['Cookie'] = cookies;
+    baseHeaders['Cookie'] = cookies;
   }
 
-  return fetch(url, {
+  // Strategy 1: Standard navigation headers with domain referer
+  let res = await fetch(url, {
     signal,
-    headers
+    headers: {
+      ...baseHeaders,
+      ...(origin ? { 'Referer': `${origin}/` } : {})
+    },
+    redirect: 'follow'
   });
+
+  // Strategy 2: Google referer fallback if 403/503
+  if (res.status === 403 || res.status === 503) {
+    res = await fetch(url, {
+      signal,
+      headers: {
+        ...baseHeaders,
+        'Referer': 'https://www.google.com/'
+      },
+      redirect: 'follow'
+    });
+  }
+
+  // Strategy 3: Minimal clean User-Agent fallback
+  if (res.status === 403 || res.status === 503) {
+    res = await fetch(url, {
+      signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+      },
+      redirect: 'follow'
+    });
+  }
+
+  return res;
 }
 
 async function firecrawlScrape(url: string, key: string, formats: string[], onlyMainContent = false, signal?: AbortSignal) {
