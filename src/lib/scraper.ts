@@ -65,21 +65,39 @@ export async function crawlNovelIndex(rootUrl: string, rawHtml?: string, cookies
   const novelTitle = $('h1').first().text().trim() || 'Unknown Novel';
   const chapters: ChapterLink[] = [];
 
+  const cleanTitle = (rawTitle: string): string => {
+    return rawTitle
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s*\d+\s*(days|hours|minutes|months|years|secs)\s*ago/gi, '')
+      .replace(/^(Read\s+)+/i, '')
+      .trim();
+  };
+
   const extractPageChapters = (pageHtml: string) => {
     const _$ = cheerio.load(pageHtml);
     _$('a').each((_, el) => {
       const href = _$(el).attr('href');
-      const title = _$(el).text().trim();
+      let title = _$(el).text().trim();
       if (!href) return;
+
+      // Ignore common non-chapter navigation links
+      if (href.includes('?tab=') || href.includes('/updates') || href.includes('/category/') || href.includes('/genre/')) {
+        return;
+      }
+
+      title = cleanTitle(title);
 
       const isChapterLink = 
         href.includes('/chapter/') || 
-        href.includes('_') || 
-        title.toLowerCase().includes('chapter') ||
+        /_\d+\.html/.test(href) || 
+        /\bchapter\b/i.test(title) ||
         (isWtrLab && (_$(el).hasClass('chapter-item') || _$(el).hasClass('toc-latest-row')));
 
       if (isChapterLink) {
-        const fullUrl = href.startsWith('http') ? href : `${baseUrl}${href}`;
+        const fullUrl = href.startsWith('http') ? href : `${baseUrl}${href.startsWith('/') ? '' : '/'}${href}`;
         if (!chapters.find(c => c.url === fullUrl)) {
           chapters.push({ title: title || `Chapter ${chapters.length + 1}`, url: fullUrl });
         }
@@ -89,13 +107,12 @@ export async function crawlNovelIndex(rootUrl: string, rawHtml?: string, cookies
 
   extractPageChapters(html);
 
-  // Pagination detection
+  // Pagination detection (only look for actual pagination containers or query params)
   const pageLinks: string[] = [];
-  $('a').each((_, el) => {
+  $('.pagination a, .page-nav a, .nav-links a, ul.pager a').each((_, el) => {
     const href = $(el).attr('href');
-    const text = $(el).text().trim();
-    if (href && (href.includes('page=') || /^\d+$/.test(text))) {
-      const fullUrl = href.startsWith('http') ? href : `${baseUrl}${href}`;
+    if (href && (href.includes('page=') || href.includes('/page/'))) {
+      const fullUrl = href.startsWith('http') ? href : `${baseUrl}${href.startsWith('/') ? '' : '/'}${href}`;
       if (!pageLinks.includes(fullUrl) && pageLinks.length < 10) pageLinks.push(fullUrl);
     }
   });
@@ -111,6 +128,16 @@ export async function crawlNovelIndex(rootUrl: string, rawHtml?: string, cookies
       console.error(`Failed to fetch page ${pageUrl}`, e);
     }
   }
+
+  // Sort chapters in natural reading order (Chapter 1 -> Chapter N)
+  chapters.sort((a, b) => {
+    const matchA = a.url.match(/_(\d+)\.html/) || a.title.match(/chapter\s*(\d+)/i) || a.url.match(/chapter-(\d+)/i);
+    const matchB = b.url.match(/_(\d+)\.html/) || b.title.match(/chapter\s*(\d+)/i) || b.url.match(/chapter-(\d+)/i);
+    if (matchA && matchB) {
+      return parseInt(matchA[1], 10) - parseInt(matchB[1], 10);
+    }
+    return 0;
+  });
 
   return { title: novelTitle, chapters };
 }
