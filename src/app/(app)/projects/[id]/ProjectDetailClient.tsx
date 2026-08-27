@@ -120,13 +120,36 @@ stealthCrawler();`;
     setChapters(prev => prev.filter(c => !ids.includes(c.id)));
   };
 
-  const editChapter = async (chapterId: string, newText: string) => {
-    const wordCount = newText.split(/\s+/).filter(Boolean).length;
-    const { error } = await supabase.from('chapters').update({ cleaned_text: newText, word_count: wordCount }).eq('id', chapterId);
-    if (error) { toast.error('Failed to save chapter changes'); return; }
-    toast.success('Chapter updated!');
-    setChapters(prev => prev.map(c => c.id === chapterId ? { ...c, cleaned_text: newText, word_count: wordCount } : c));
+  const editChapters = async (updates: { id: string; text: string }[]) => {
+    if (updates.length === 0) return;
+    const updatePromises = updates.map(u => {
+      const wordCount = u.text.split(/\s+/).filter(Boolean).length;
+      return supabase.from('chapters').update({ cleaned_text: u.text, word_count: wordCount }).eq('id', u.id);
+    });
+
+    const results = await Promise.all(updatePromises);
+    const hasError = results.some(r => r.error);
+    if (hasError) {
+      toast.error('Failed to save some chapter changes');
+      return;
+    }
+
+    toast.success(updates.length > 1 ? `${updates.length} chapters updated!` : 'Chapter updated!');
+    const updateMap = new Map(updates.map(u => [u.id, {
+      cleaned_text: u.text,
+      word_count: u.text.split(/\s+/).filter(Boolean).length
+    }]));
+
+    setChapters(prev => prev.map(c => {
+      const u = updateMap.get(c.id);
+      return u ? { ...c, cleaned_text: u.cleaned_text, word_count: u.word_count } : c;
+    }));
   };
+
+  const editChapter = async (chapterId: string, newText: string) => {
+    await editChapters([{ id: chapterId, text: newText }]);
+  };
+
 
   const totalWords = chapters.reduce((sum, c) => sum + (c.word_count || 0), 0);
 
@@ -233,7 +256,13 @@ stealthCrawler();`;
 
       <section className="mt-8">
         <h2 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">📚 Chapter History</h2>
-        <ChapterHistory chapters={chapters} searchEnabled onDeleteChapters={deleteChapters} onEditChapter={editChapter} />
+        <ChapterHistory 
+          chapters={chapters} 
+          searchEnabled 
+          onDeleteChapters={deleteChapters} 
+          onEditChapter={editChapter} 
+          onEditChapters={editChapters} 
+        />
       </section>
     </div>
   );

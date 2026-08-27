@@ -1,16 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { Chapter } from '@/types';
 import toast from 'react-hot-toast';
-import { getChapterTitleAndBody, updateChapterTitle } from '@/lib/chapterHelpers';
+import { getChapterTitleAndBody, updateChapterTitle, generateSequentialTitleUpdates } from '@/lib/chapterHelpers';
 
 interface Props {
   chapters: Chapter[];
   searchEnabled?: boolean;
   onDeleteChapters?: (ids: string[]) => void;
   onEditChapter?: (id: string, text: string) => void;
+  onEditChapters?: (updates: { id: string; text: string }[]) => void;
 }
 
-export default function ChapterHistory({ chapters, searchEnabled = false, onDeleteChapters, onEditChapter }: Props) {
+export default function ChapterHistory({ chapters, searchEnabled = false, onDeleteChapters, onEditChapter, onEditChapters }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [idsToDelete, setIdsToDelete] = useState<string[]>([]);
@@ -69,12 +70,11 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
         if (!isNaN(start) && !isNaN(end)) {
           const s = Math.min(start, end);
           const e = Math.max(start, end);
-          // Chapters are usually shown in reverse chronological order (newest first)
-          // The index in 'chapters' might not match what the user expects (Chapter 1, 2, 3...)
-          // So we match against the chapter title/index if possible.
-          // For now, let's assume the user means "Chapter N" as it appears in the title logic.
           chapters.forEach((c, idx) => {
-            const chapterNum = chapters.length - idx;
+            const defaultTitle = `Chapter ${chapters.length - idx}`;
+            const { title } = getChapterTitleAndBody(c.cleaned_text, defaultTitle);
+            const numMatch = title.match(/\d+/);
+            const chapterNum = numMatch ? parseInt(numMatch[0], 10) : (chapters.length - idx);
             if (chapterNum >= s && chapterNum <= e) {
               newSelected.add(c.id);
             }
@@ -84,7 +84,10 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
         const num = parseInt(part);
         if (!isNaN(num)) {
           chapters.forEach((c, idx) => {
-            const chapterNum = chapters.length - idx;
+            const defaultTitle = `Chapter ${chapters.length - idx}`;
+            const { title } = getChapterTitleAndBody(c.cleaned_text, defaultTitle);
+            const numMatch = title.match(/\d+/);
+            const chapterNum = numMatch ? parseInt(numMatch[0], 10) : (chapters.length - idx);
             if (chapterNum === num) {
               newSelected.add(c.id);
             }
@@ -150,9 +153,16 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
         return `# ${title}\n\n${metadataLines}\n\n---\n\n${body}`;
       }).join('\n\n\n' + '---' + '\n\n\n');
 
+      const firstTitle = getChapterTitleAndBody(chunk[0].cleaned_text, `Chapter ${startNum}`).title;
+      const lastTitle = getChapterTitleAndBody(chunk[chunk.length - 1].cleaned_text, `Chapter ${endNum}`).title;
+      const firstMatch = firstTitle.match(/\d+/);
+      const lastMatch = lastTitle.match(/\d+/);
+      const displayStart = firstMatch ? parseInt(firstMatch[0], 10) : startNum;
+      const displayEnd = lastMatch ? parseInt(lastMatch[0], 10) : endNum;
+
       const fileName = totalChunks === 1 
-        ? `chapters-${startNum}-${endNum}.md`
-        : `chapters-${String(startNum).padStart(3, '0')}-${String(endNum).padStart(3, '0')}.md`;
+        ? `chapters-${displayStart}-${displayEnd}.md`
+        : `chapters-${String(displayStart).padStart(3, '0')}-${String(displayEnd).padStart(3, '0')}.md`;
 
       downloadMarkdownFile(fileName, fileContent);
 
@@ -239,16 +249,14 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
   };
 
   const saveEditTitle = (chapter: Chapter) => {
-    if (editingTitleId && onEditChapter) {
-      const { body } = getChapterTitleAndBody(chapter.cleaned_text, '');
-      
-      // If they leave it blank, we remove the custom title
-      const newTitle = editTitleText.trim();
-      const newCleanedText = updateChapterTitle(body, newTitle);
-      
-      onEditChapter(editingTitleId, newCleanedText);
-      setEditingTitleId(null);
+    if (!editingTitleId) return;
+    const updates = generateSequentialTitleUpdates(chapters, chapter.id, editTitleText);
+    if (onEditChapters) {
+      onEditChapters(updates);
+    } else if (onEditChapter) {
+      updates.forEach(u => onEditChapter(u.id, u.text));
     }
+    setEditingTitleId(null);
   };
 
   if (chapters.length === 0) {
