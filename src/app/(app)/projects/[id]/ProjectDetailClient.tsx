@@ -258,6 +258,7 @@ stealthCrawler();`;
         <h2 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2">📚 Chapter History</h2>
         <ChapterHistory 
           chapters={chapters} 
+          projectName={project.title}
           searchEnabled 
           onDeleteChapters={deleteChapters} 
           onEditChapter={editChapter} 

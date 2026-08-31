@@ -1,17 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import { Chapter } from '@/types';
 import toast from 'react-hot-toast';
-import { getChapterTitleAndBody, updateChapterTitle, generateSequentialTitleUpdates } from '@/lib/chapterHelpers';
+import { getChapterTitleAndBody, updateChapterTitle, generateSequentialTitleUpdates, parseChapterNumber } from '@/lib/chapterHelpers';
 
 interface Props {
   chapters: Chapter[];
+  projectName?: string;
   searchEnabled?: boolean;
   onDeleteChapters?: (ids: string[]) => void;
   onEditChapter?: (id: string, text: string) => void;
   onEditChapters?: (updates: { id: string; text: string }[]) => void;
 }
 
-export default function ChapterHistory({ chapters, searchEnabled = false, onDeleteChapters, onEditChapter, onEditChapters }: Props) {
+export default function ChapterHistory({ chapters, projectName, searchEnabled = false, onDeleteChapters, onEditChapter, onEditChapters }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [idsToDelete, setIdsToDelete] = useState<string[]>([]);
@@ -32,6 +33,15 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
       titleInputRef.current.focus();
     }
   }, [editingTitleId]);
+
+  const getChapterNumber = (chapter: Chapter, fallbackIdx: number): number => {
+    const defaultTitle = `Chapter ${chapters.length - fallbackIdx}`;
+    const { title } = getChapterTitleAndBody(chapter.cleaned_text, defaultTitle);
+    const parsed = parseChapterNumber(title);
+    if (parsed) return parsed.num;
+    const numMatch = title.match(/\d+/);
+    return numMatch ? parseInt(numMatch[0], 10) : (chapters.length - fallbackIdx);
+  };
 
   const filtered = searchQuery
     ? chapters.filter(c =>
@@ -59,46 +69,56 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
   };
 
   const selectRange = () => {
-    if (!rangeInput.trim()) return;
+    const raw = rangeInput.trim();
+    if (!raw) return;
     
-    const parts = rangeInput.split(',').map(p => p.trim());
+    // Support formats like "1-50", "1 - 50", "1 to 50", "1..50", "ch 1 - ch 50", "1-10, 15, 20-30"
+    const parts = raw.split(/[,;]+/).map(p => p.trim()).filter(Boolean);
     const newSelected = new Set(selectedIds);
+    let matchedCount = 0;
     
     parts.forEach(part => {
-      if (part.includes('-')) {
-        const [start, end] = part.split('-').map(n => parseInt(n));
+      // Check for range pattern
+      const rangeMatch = part.match(/(?:ch(?:apter)?\s*)?(\d+)\s*(?:-|to|\.\.)\s*(?:ch(?:apter)?\s*)?(\d+)/i);
+      if (rangeMatch) {
+        const start = parseInt(rangeMatch[1], 10);
+        const end = parseInt(rangeMatch[2], 10);
         if (!isNaN(start) && !isNaN(end)) {
           const s = Math.min(start, end);
           const e = Math.max(start, end);
           chapters.forEach((c, idx) => {
-            const defaultTitle = `Chapter ${chapters.length - idx}`;
-            const { title } = getChapterTitleAndBody(c.cleaned_text, defaultTitle);
-            const numMatch = title.match(/\d+/);
-            const chapterNum = numMatch ? parseInt(numMatch[0], 10) : (chapters.length - idx);
-            if (chapterNum >= s && chapterNum <= e) {
+            const chNum = getChapterNumber(c, idx);
+            if (chNum >= s && chNum <= e) {
               newSelected.add(c.id);
+              matchedCount++;
             }
           });
         }
       } else {
-        const num = parseInt(part);
-        if (!isNaN(num)) {
-          chapters.forEach((c, idx) => {
-            const defaultTitle = `Chapter ${chapters.length - idx}`;
-            const { title } = getChapterTitleAndBody(c.cleaned_text, defaultTitle);
-            const numMatch = title.match(/\d+/);
-            const chapterNum = numMatch ? parseInt(numMatch[0], 10) : (chapters.length - idx);
-            if (chapterNum === num) {
-              newSelected.add(c.id);
-            }
-          });
+        // Single number
+        const singleMatch = part.match(/(?:ch(?:apter)?\s*)?(\d+)/i);
+        if (singleMatch) {
+          const num = parseInt(singleMatch[1], 10);
+          if (!isNaN(num)) {
+            chapters.forEach((c, idx) => {
+              const chNum = getChapterNumber(c, idx);
+              if (chNum === num) {
+                newSelected.add(c.id);
+                matchedCount++;
+              }
+            });
+          }
         }
       }
     });
     
-    setSelectedIds(newSelected);
-    setRangeInput('');
-    toast.success('Selection updated!');
+    if (newSelected.size > selectedIds.size) {
+      setSelectedIds(newSelected);
+      setRangeInput('');
+      toast.success(`Selected ${newSelected.size} chapter${newSelected.size > 1 ? 's' : ''}`);
+    } else {
+      toast.error('No chapters found for the specified range');
+    }
   };
 
   const copyChapter = (text: string) => {
@@ -129,19 +149,27 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
       return;
     }
 
-    // Sort chapters in chronological order (Chapter 1 -> Chapter N)
-    const sorted = [...targetChapters].reverse();
+    // Sort chapters in ascending numerical order (Chapter 1 -> Chapter 50)
+    const sorted = [...targetChapters].sort((a, b) => {
+      const idxA = chapters.indexOf(a);
+      const idxB = chapters.indexOf(b);
+      const numA = getChapterNumber(a, idxA);
+      const numB = getChapterNumber(b, idxB);
+      return numA - numB;
+    });
+
     const chunkSize = 50;
     const totalChunks = Math.ceil(sorted.length / chunkSize);
+    const safePrefix = projectName ? `${projectName.replace(/[^a-zA-Z0-9_-]/g, '_')}_` : '';
 
     for (let i = 0; i < totalChunks; i++) {
       const chunk = sorted.slice(i * chunkSize, (i + 1) * chunkSize);
-      const startNum = i * chunkSize + 1;
-      const endNum = i * chunkSize + chunk.length;
+      const startIdx = i * chunkSize;
+      const endIdx = startIdx + chunk.length - 1;
 
-      const fileContent = chunk.map((c, chunkIdx) => {
-        const overallNum = startNum + chunkIdx;
-        const defaultTitle = `Chapter ${overallNum}`;
+      const fileContent = chunk.map((c) => {
+        const globalIdx = chapters.indexOf(c);
+        const defaultTitle = `Chapter ${chapters.length - globalIdx}`;
         const { title, body } = getChapterTitleAndBody(c.cleaned_text, defaultTitle);
         
         const metadataLines = [
@@ -153,16 +181,14 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
         return `# ${title}\n\n${metadataLines}\n\n---\n\n${body}`;
       }).join('\n\n\n' + '---' + '\n\n\n');
 
-      const firstTitle = getChapterTitleAndBody(chunk[0].cleaned_text, `Chapter ${startNum}`).title;
-      const lastTitle = getChapterTitleAndBody(chunk[chunk.length - 1].cleaned_text, `Chapter ${endNum}`).title;
-      const firstMatch = firstTitle.match(/\d+/);
-      const lastMatch = lastTitle.match(/\d+/);
-      const displayStart = firstMatch ? parseInt(firstMatch[0], 10) : startNum;
-      const displayEnd = lastMatch ? parseInt(lastMatch[0], 10) : endNum;
+      const firstGlobalIdx = chapters.indexOf(chunk[0]);
+      const lastGlobalIdx = chapters.indexOf(chunk[chunk.length - 1]);
+      const displayStart = getChapterNumber(chunk[0], firstGlobalIdx);
+      const displayEnd = getChapterNumber(chunk[chunk.length - 1], lastGlobalIdx);
 
       const fileName = totalChunks === 1 
-        ? `chapters-${displayStart}-${displayEnd}.md`
-        : `chapters-${String(displayStart).padStart(3, '0')}-${String(displayEnd).padStart(3, '0')}.md`;
+        ? `${safePrefix}chapters_${displayStart}-${displayEnd}.md`
+        : `${safePrefix}chapters_${String(displayStart).padStart(3, '0')}-${String(displayEnd).padStart(3, '0')}.md`;
 
       downloadMarkdownFile(fileName, fileContent);
 
@@ -271,53 +297,73 @@ export default function ChapterHistory({ chapters, searchEnabled = false, onDele
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex items-center gap-3 bg-bg-elevated/50 p-3 rounded-xl border border-border/50">
-        <div className="flex items-center gap-2 pr-2 border-r border-border/50">
-          <input 
-            type="checkbox" 
-            checked={filtered.length > 0 && selectedIds.size === filtered.length}
-            onChange={toggleSelectAll}
-            className="w-4 h-4 rounded border-border bg-bg-primary text-accent focus:ring-accent"
-          />
-        </div>
-        
-        {searchEnabled && (
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="input-field py-1.5 flex-1 bg-transparent border-none focus:ring-0"
-            placeholder="🔍 Search chapters..."
-          />
-        )}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-bg-elevated/50 p-3 rounded-xl border border-border/50">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 pr-2 border-r border-border/50">
+            <input 
+              type="checkbox" 
+              checked={filtered.length > 0 && selectedIds.size === filtered.length}
+              onChange={toggleSelectAll}
+              className="w-4 h-4 rounded border-border bg-bg-primary text-accent focus:ring-accent cursor-pointer"
+              title={selectedIds.size === filtered.length ? 'Deselect all' : 'Select all'}
+            />
+            <span className="text-xs text-text-muted select-none whitespace-nowrap">
+              {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'All'}
+            </span>
+          </div>
 
-        <div className="flex items-center gap-2 pr-2 border-r border-border/50">
-          <input
-            type="text"
-            value={rangeInput}
-            onChange={e => setRangeInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && selectRange()}
-            className="input-field py-1 px-2 text-xs w-32 bg-black/20"
-            placeholder="Range (e.g. 1-50)"
-          />
-          <button 
-            onClick={selectRange}
-            className="btn-secondary text-[10px] py-1.5 px-2 font-bold uppercase"
-          >
-            Select
-          </button>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={rangeInput}
+              onChange={e => setRangeInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && selectRange()}
+              className="input-field py-1 px-2.5 text-xs w-36 bg-black/20"
+              placeholder="Range (e.g. 1-50)"
+            />
+            <button 
+              onClick={selectRange}
+              className="btn-secondary text-[11px] py-1 px-2.5 font-bold uppercase tracking-wider hover:border-accent/40"
+              title="Select chapters in range (e.g. 1-50)"
+            >
+              Select Range
+            </button>
+            {selectedIds.size > 0 && (
+              <button 
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs text-text-muted hover:text-text-primary px-1.5 py-1 transition-colors"
+                title="Clear selected chapters"
+              >
+                ✕ Clear
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {selectedIds.size > 0 && (
+          {searchEnabled && (
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="input-field py-1 px-3 text-xs w-44 bg-black/20"
+              placeholder="🔍 Search chapters..."
+            />
+          )}
+
+          {selectedIds.size > 0 && onDeleteChapters && (
             <button 
               onClick={() => setIdsToDelete(Array.from(selectedIds))}
-              className="btn-danger text-xs py-1.5 px-3 flex items-center gap-2"
+              className="btn-danger text-xs py-1.5 px-3 flex items-center gap-1.5"
             >
-              🗑 Delete Selected ({selectedIds.size})
+              🗑 Delete ({selectedIds.size})
             </button>
           )}
-          <button onClick={exportMarkdown} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
+
+          <button 
+            onClick={exportMarkdown} 
+            className="btn-secondary text-xs py-1.5 px-3 shrink-0 flex items-center gap-1.5 border-accent/40 text-accent hover:bg-accent/10"
+          >
             📥 {selectedIds.size > 0 ? `Export Selected (${selectedIds.size})` : 'Export All'} (.md)
           </button>
         </div>
