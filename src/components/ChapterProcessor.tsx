@@ -88,15 +88,36 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
       const authRes = await supabase.auth.getUser();
       const user = authRes?.data?.user;
       if (user) {
-        const { error: saveErr } = await supabase.from('chapters').insert({ 
-          user_id: user.id, 
-          project_id: projId, 
-          chapter_url: chapterUrl || null, 
-          raw_text: manualText || '', // We don't have the original raw html if we fetched it on server
-          cleaned_text: finalCleaned, 
-          word_count: wc 
-        });
-        if (saveErr) toast.error('Cleaned but failed to save'); else toast.success('Chapter saved!');
+        let existingId: string | null = null;
+        if (chapterUrl) {
+          const { data: existing } = await supabase
+            .from('chapters')
+            .select('id')
+            .eq('project_id', projId)
+            .eq('chapter_url', chapterUrl)
+            .limit(1)
+            .maybeSingle();
+          if (existing) existingId = existing.id;
+        }
+
+        if (existingId) {
+          const { error: updateErr } = await supabase.from('chapters').update({
+            cleaned_text: finalCleaned,
+            word_count: wc,
+            detected_at: new Date().toISOString()
+          }).eq('id', existingId);
+          if (updateErr) toast.error('Cleaned but failed to update'); else toast.success('Chapter updated!');
+        } else {
+          const { error: saveErr } = await supabase.from('chapters').insert({ 
+            user_id: user.id, 
+            project_id: projId, 
+            chapter_url: chapterUrl || null, 
+            raw_text: manualText || '', // We don't have the original raw html if we fetched it on server
+            cleaned_text: finalCleaned, 
+            word_count: wc 
+          });
+          if (saveErr) toast.error('Cleaned but failed to save'); else toast.success('Chapter saved!');
+        }
       }
       updateStep('save', 'done');
     } catch (err: unknown) {
@@ -128,13 +149,29 @@ export default function ChapterProcessor({ projects, preselectedProjectId }: Pro
         const bulkAuthRes = await supabase.auth.getUser();
         const user = bulkAuthRes?.data?.user;
         if (user) {
-          await supabase.from('chapters').insert({ 
-            user_id: user.id, 
-            project_id: selectedProjectId, 
-            chapter_url: urls[i], 
-            cleaned_text: cleaned, 
-            word_count: cleaned.split(/\s+/).filter(Boolean).length 
-          });
+          const { data: existing } = await supabase
+            .from('chapters')
+            .select('id')
+            .eq('project_id', selectedProjectId)
+            .eq('chapter_url', urls[i])
+            .limit(1)
+            .maybeSingle();
+
+          if (existing) {
+            await supabase.from('chapters').update({
+              cleaned_text: cleaned,
+              word_count: cleaned.split(/\s+/).filter(Boolean).length,
+              detected_at: new Date().toISOString()
+            }).eq('id', existing.id);
+          } else {
+            await supabase.from('chapters').insert({ 
+              user_id: user.id, 
+              project_id: selectedProjectId, 
+              chapter_url: urls[i], 
+              cleaned_text: cleaned, 
+              word_count: cleaned.split(/\s+/).filter(Boolean).length 
+            });
+          }
         }
 
         setBulkProgress(prev => ({ ...prev!, results: [...prev!.results, { url: urls[i], status: 'success' }] }));

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase';
@@ -24,12 +24,19 @@ export default function ProjectDetailClient({ project: initialProject, chapters:
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [startCh, setStartCh] = useState('1');
   const [endCh, setEndCh] = useState('50');
+  const [serverOrigin, setServerOrigin] = useState('https://html-fetcher-plum.vercel.app');
 
-  const getCrawlerScript = (serverOrigin?: string) => `async function stealthCrawler() {
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setServerOrigin(window.location.origin);
+    }
+  }, []);
+
+  const getCrawlerScript = (customOrigin?: string) => `async function stealthCrawler() {
   const projectId = "${project.id}";
   const startIdx = parseInt("${startCh || '1'}") - 1;
   const endIdx = parseInt("${endCh || '50'}");
-  const targetServer = "${serverOrigin || (typeof window !== 'undefined' ? window.location.origin : 'https://html-fetcher-plum.vercel.app')}";
+  const targetServer = "${customOrigin || serverOrigin}";
   
   const links = Array.from(document.querySelectorAll('a'))
     .filter(a => {
@@ -114,10 +121,22 @@ stealthCrawler();`;
   };
 
   const deleteChapters = async (ids: string[]) => {
-    const { error } = await supabase.from('chapters').delete().in('id', ids);
-    if (error) { toast.error(`Failed to delete ${ids.length > 1 ? 'chapters' : 'chapter'}`); return; }
-    toast.success(`${ids.length} chapter${ids.length > 1 ? 's' : ''} deleted`);
-    setChapters(prev => prev.filter(c => !ids.includes(c.id)));
+    if (!ids.length) return;
+    try {
+      // Chunk deletion (50 per batch) to prevent PostgREST URL length limits
+      const chunkSize = 50;
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const chunk = ids.slice(i, i + chunkSize);
+        const { error } = await supabase.from('chapters').delete().in('id', chunk);
+        if (error) throw error;
+      }
+      toast.success(`${ids.length} chapter${ids.length > 1 ? 's' : ''} deleted`);
+      setChapters(prev => prev.filter(c => !ids.includes(c.id)));
+    } catch (err: unknown) {
+      console.error('Failed to delete chapters:', err);
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      toast.error(`Failed to delete: ${message}`);
+    }
   };
 
   const editChapters = async (updates: { id: string; text: string }[]) => {
@@ -234,7 +253,7 @@ stealthCrawler();`;
           </div>
 
           <div className="bg-black/40 rounded-lg p-4 font-mono text-[11px] text-accent/90 overflow-x-auto max-h-64 mb-4">
-            <pre>{getCrawlerScript()}</pre>
+            <pre suppressHydrationWarning>{getCrawlerScript()}</pre>
           </div>
 
           <div className="flex flex-col gap-2">

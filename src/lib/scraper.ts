@@ -140,7 +140,10 @@ export async function crawlNovelIndex(
       const isChapterLink = 
         href.includes('/chapter/') || 
         /_\d+\.html/.test(href) || 
+        /\/book\/\d+\/\d+\.html/.test(href) ||
+        /\/\d+\/\d+\.html/.test(href) ||
         (/\bchapter\b/i.test(title) && !href.includes('/list/')) ||
+        (/第\s*\d+\s*[章节回卷]/.test(title)) ||
         (isWtrLab && (_$(el).hasClass('chapter-item') || _$(el).hasClass('toc-latest-row')));
 
       if (isChapterLink) {
@@ -229,8 +232,8 @@ export async function crawlNovelIndex(
 
   // Sort chapters in natural reading order (Chapter 1 -> Chapter N)
   chapters.sort((a, b) => {
-    const matchA = a.url.match(/_(\d+)\.html/) || a.title.match(/chapter\s*(\d+)/i) || a.url.match(/chapter-(\d+)/i);
-    const matchB = b.url.match(/_(\d+)\.html/) || b.title.match(/chapter\s*(\d+)/i) || b.url.match(/chapter-(\d+)/i);
+    const matchA = a.url.match(/_(\d+)\.html/) || a.url.match(/\/(\d+)\.html/) || a.title.match(/chapter\s*(\d+)/i) || a.title.match(/第\s*(\d+)\s*[章节回卷]/i);
+    const matchB = b.url.match(/_(\d+)\.html/) || b.url.match(/\/(\d+)\.html/) || b.title.match(/chapter\s*(\d+)/i) || b.title.match(/第\s*(\d+)\s*[章节回卷]/i);
     if (matchA && matchB) {
       return parseInt(matchA[1], 10) - parseInt(matchB[1], 10);
     }
@@ -279,7 +282,8 @@ export function cleanChapterHtml(html: string): string {
   REMOVE.forEach(s => $(s).remove());
 
   const SELECTORS = [
-    'article', 'main', '.content', '#content', '.post-content', '.entry-content'
+    '#chaptercontent', '#content', '#htmlContent', '#txtContent', '.read-content', '.showtxt',
+    'article', 'main', '.content', '.post-content', '.entry-content'
   ];
   
   for (const s of SELECTORS) {

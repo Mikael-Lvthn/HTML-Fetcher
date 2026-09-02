@@ -151,7 +151,8 @@ export async function fetchForReader(url: string, opts: FetchOptions): Promise<R
   REMOVE.forEach(s => $(s).remove());
 
   const SELECTORS = [
-    'article', 'main', '.chapter-body', '.content', '#content', '.post-content', '.entry-content'
+    '#chaptercontent', '#content', '#htmlContent', '#txtContent', '.read-content', '.showtxt',
+    'article', 'main', '.chapter-body', '.content', '.post-content', '.entry-content'
   ];
   let contentHtml = '';
   for (const s of SELECTORS) {

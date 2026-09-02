@@ -60,7 +60,8 @@ export async function POST(request: NextRequest) {
       .select('id')
       .eq('project_id', projectId)
       .eq('chapter_url', url)
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     let result;
     if (existing) {
